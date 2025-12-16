@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"resume-tailor/internal/config"
 	"resume-tailor/internal/db"
 	"resume-tailor/internal/httpapi"
@@ -15,19 +19,46 @@ func main() {
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("failed to log config: %v", err)
+		slog.Error("failed to load config", "error", err)
+		os.Exit(1)
 	}
 	pool, err := db.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("failed to connect to db: %v", err)
+		slog.Error("failed to connect to db", "error", err)
+		os.Exit(1)
 	}
 	defer db.Close(pool)
 
 	router := httpapi.NewRouter()
 
-	fmt.Printf("listening to: %v", cfg.HTTPAddr)
-	err = http.ListenAndServe(cfg.HTTPAddr, router)
-	if err != nil {
-		log.Fatalf("server error: %v", err)
+	srv := &http.Server{
+		Addr:    cfg.HTTPAddr,
+		Handler: router,
 	}
+
+	// Start server in goroutine
+	go func() {
+		slog.Info("server starting", "addr", cfg.HTTPAddr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	// Listen for SIGINT/SIGTERM
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	slog.Info("shutting down server")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("server shutdown error", "error", err)
+		os.Exit(1)
+	}
+
+	slog.Info("server stopped")
 }
