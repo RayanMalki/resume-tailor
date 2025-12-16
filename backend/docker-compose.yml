@@ -1,0 +1,28 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: resume_postgres
+    environment:
+      POSTGRES_DB: resume_tailor
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: resume_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: rayanmalki54@gmail.com
+      PGADMIN_DEFAULT_PASSWORD: RayanMalki2004
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+volumes:
+  pgdata:
