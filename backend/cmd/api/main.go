@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"resume-tailor/internal/config"
 	"resume-tailor/internal/db"
+	"resume-tailor/internal/httpapi"
 )
 
 func main() {
@@ -22,17 +23,11 @@ func main() {
 	}
 	defer db.Close(pool)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", rootHandler)
-	mux.HandleFunc("/health", handleHealth)
+	router := httpapi.NewRouter()
 
 	fmt.Printf("listening to: %v", cfg.HTTPAddr)
-	http.ListenAndServe(cfg.HTTPAddr, mux)
-}
-
-func rootHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "hello")
-}
-func handleHealth(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "ok")
+	err = http.ListenAndServe(cfg.HTTPAddr, router)
+	if err != nil {
+		log.Fatalf("server error: %v", err)
+	}
 }
