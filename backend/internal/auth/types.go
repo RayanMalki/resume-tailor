@@ -13,8 +13,11 @@ type User struct {
 	PasswordHash string
 	DisplayName  string
 	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
-var ErrEmailTaken = errors.New("email already in use")
-var ErrInvalidCredentials = errors.New("invalid credentials")
-var ErrUserNotfound = errors.New("user not found")
+var (
+	ErrEmailTaken         = errors.New("email already in use")
+	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrUserNotFound       = errors.New("user not found")
+)
