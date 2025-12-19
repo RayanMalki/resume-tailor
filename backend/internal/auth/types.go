@@ -20,4 +20,5 @@ var (
 	ErrEmailTaken         = errors.New("email already in use")
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrUserNotFound       = errors.New("user not found")
+	ErrTokenNotFound      = errors.New("token not found")
 )

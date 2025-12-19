@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"resume-tailor/internal/auth"
 	"resume-tailor/internal/config"
 	"resume-tailor/internal/db"
 	"resume-tailor/internal/httpapi"
@@ -23,13 +24,15 @@ func main() {
 		os.Exit(1)
 	}
 	pool, err := db.Connect(ctx, cfg.DatabaseURL)
+	authRepo := auth.NewRepo(pool)
+	authSvc := auth.NewService(authRepo)
 	if err != nil {
 		slog.Error("failed to connect to db", "error", err)
 		os.Exit(1)
 	}
 	defer db.Close(pool)
 
-	router := httpapi.NewRouter()
+	router := httpapi.NewRouter(authSvc)
 
 	srv := &http.Server{
 		Addr:    cfg.HTTPAddr,
