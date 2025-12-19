@@ -10,8 +10,8 @@ import (
 type Status string
 
 const (
-	SatusCreated     Status = "created"
-	SatusQueued      Status = "queued"
+	StatusCreated    Status = "created"
+	StatusQueued     Status = "queued"
 	StatusProcessing Status = "processing"
 	StatusFailed     Status = "Failed"
 )
@@ -29,4 +29,5 @@ type Run struct {
 
 var (
 	ErrRunNotFound = errors.New("run failed")
+	ErrForbidden   = errors.New("forbidden")
 )
