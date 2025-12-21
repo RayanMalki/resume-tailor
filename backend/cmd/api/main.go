@@ -13,6 +13,7 @@ import (
 	"resume-tailor/internal/config"
 	"resume-tailor/internal/db"
 	"resume-tailor/internal/httpapi"
+	"resume-tailor/internal/runs"
 )
 
 func main() {
@@ -26,13 +27,15 @@ func main() {
 	pool, err := db.Connect(ctx, cfg.DatabaseURL)
 	authRepo := auth.NewRepo(pool)
 	authSvc := auth.NewService(authRepo)
+	runsRepo := runs.NewRepo(pool)
+	runsSvc := runs.NewService(runsRepo)
 	if err != nil {
 		slog.Error("failed to connect to db", "error", err)
 		os.Exit(1)
 	}
 	defer db.Close(pool)
 
-	router := httpapi.NewRouter(authSvc)
+	router := httpapi.NewRouter(authSvc, runsSvc)
 
 	srv := &http.Server{
 		Addr:    cfg.HTTPAddr,

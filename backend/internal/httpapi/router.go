@@ -32,7 +32,8 @@ func NewRouter(authSvc *auth.Service, runsSvc *runs.Service) http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.AuthRequired(authSvc))
 			r.Get("/me", handlers.Me())
-			r.Get("/runs/{runID}", handlers.GetRunByIDHandler(runsSvc))
+			r.Get("/runs/{runID}", handlers.GetRunByIdHandler(runsSvc))
+			r.Get("/runs", handlers.ListRunsHandler(runsSvc))
 
 		})
 

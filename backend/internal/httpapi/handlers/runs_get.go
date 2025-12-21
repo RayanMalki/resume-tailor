@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func GetRunByIDHandler(runsSvc *runs.Service) http.HandlerFunc {
+func GetRunByIdHandler(runsSvc *runs.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		userID, ok := middleware.UserIDFromContext(r.Context())

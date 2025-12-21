@@ -73,3 +73,21 @@ func (s *Service) GetRunByID(ctx context.Context, userID, runID uuid.UUID) (Run,
 
 	return run, nil
 }
+
+func (s *Service) ListRunsByUser(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Run, error) {
+	if userID == uuid.Nil {
+		return nil, fmt.Errorf("bad input: user_id")
+	}
+
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	return s.repo.ListRunsByUser(ctx, userID, limit, offset)
+}
