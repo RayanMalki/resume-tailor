@@ -2,6 +2,7 @@ package runs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -44,4 +45,31 @@ func (s *Service) CreateRun(ctx context.Context, userID,
 
 	return run, nil
 
+}
+
+func (s *Service) GetRunByID(ctx context.Context, userID, runID uuid.UUID) (Run, error) {
+	if userID == uuid.Nil {
+		return Run{}, fmt.Errorf("bad input: user_id")
+
+	}
+	if runID == uuid.Nil {
+		return Run{}, fmt.Errorf("bad input: run_id")
+
+	}
+
+	run, err := s.repo.GetRunByID(ctx, runID)
+	if errors.Is(err, ErrRunNotFound) {
+		return Run{}, ErrRunNotFound
+
+	}
+	if err != nil {
+		return Run{}, err
+
+	}
+	if run.UserID != userID {
+		return Run{}, ErrRunNotFound
+
+	}
+
+	return run, nil
 }

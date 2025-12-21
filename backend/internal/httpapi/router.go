@@ -6,11 +6,12 @@ import (
 	"resume-tailor/internal/auth"
 	"resume-tailor/internal/httpapi/handlers"
 	"resume-tailor/internal/httpapi/middleware"
+	"resume-tailor/internal/runs"
 
 	"github.com/go-chi/chi/v5"
 )
 
-func NewRouter(authSvc *auth.Service) http.Handler {
+func NewRouter(authSvc *auth.Service, runsSvc *runs.Service) http.Handler {
 	r := chi.NewRouter()
 
 	// Global middleware
@@ -27,7 +28,14 @@ func NewRouter(authSvc *auth.Service) http.Handler {
 		r.Post("/auth/signup", handlers.Signup(authSvc))
 		r.Post("/auth/login", handlers.Login(authSvc))
 		r.Post("/auth/logout", handlers.Logout(authSvc))
-		r.With(middleware.AuthRequired(authSvc)).Get("/me", handlers.Me())
+
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.AuthRequired(authSvc))
+			r.Get("/me", handlers.Me())
+			r.Get("/runs/{runID}", handlers.GetRunByIDHandler(runsSvc))
+
+		})
+
 	})
 
 	// NotFound handler returns JSON 404
