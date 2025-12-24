@@ -30,4 +30,5 @@ type Run struct {
 var (
 	ErrRunNotFound = errors.New("run failed")
 	ErrForbidden   = errors.New("forbidden")
+	ErrBadInput    = errors.New("bad input")
 )
