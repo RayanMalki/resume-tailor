@@ -35,13 +35,13 @@ func main() {
 
 	authRepo := auth.NewRepo(pool)
 	authSvc := auth.NewService(authRepo)
+	jobsRepo := jobs.NewRepo(pool)
 	runsRepo := runs.NewRepo(pool)
-	runsSvc := runs.NewService(runsRepo)
+	runsSvc := runs.NewService(runsRepo, jobsRepo)
 	resumesRepo := resumes.NewRepo(pool)
 	resumesSvc := resumes.NewService(resumesRepo)
-	jobsRepo := jobs.NewRepo(pool)
 
-	router := httpapi.NewRouter(authSvc, runsSvc, resumesSvc, jobsRepo)
+	router := httpapi.NewRouter(authSvc, runsSvc, resumesSvc)
 
 	srv := &http.Server{
 		Addr:    cfg.HTTPAddr,

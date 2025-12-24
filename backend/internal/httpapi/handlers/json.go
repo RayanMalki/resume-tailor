@@ -8,7 +8,7 @@ import (
 func writeJSON(w http.ResponseWriter, status int, data any) {
 
 	//tells the clients we are returning JSON
-	w.Header().Set("Content-Type", "applicatio/json")
+	w.Header().Set("Content-Type", "application/json")
 
 	//set HTTP status code (200, 400, 500 etc etc)
 	w.WriteHeader(status)

@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"resume-tailor/internal/httpapi/middleware"
-	"resume-tailor/internal/jobs"
 	"resume-tailor/internal/resumes"
 	"resume-tailor/internal/runs"
 
@@ -20,10 +19,9 @@ type CreateRunRequest struct {
 
 type CreateRunResponse struct {
 	RunID string `json:"runId"`
-	JobID string `json:"jobId,omitempty"`
 }
 
-func CreateRunHandler(runsSvc *runs.Service, resumesSvc *resumes.Service, jobsRepo *jobs.Repo) http.HandlerFunc {
+func CreateRunHandler(runsSvc *runs.Service, resumesSvc *resumes.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := middleware.UserIDFromContext(r.Context())
 		if !ok {
@@ -69,17 +67,8 @@ func CreateRunHandler(runsSvc *runs.Service, resumesSvc *resumes.Service, jobsRe
 			return
 		}
 
-		// Enqueue job for processing
-		jobID, err := jobsRepo.EnqueueProcessRun(r.Context(), run.ID)
-		if err != nil {
-			// If enqueue fails, return 500 (do NOT delete the run)
-			writeError(w, http.StatusInternalServerError, "internal server error")
-			return
-		}
-
 		writeJSON(w, http.StatusCreated, CreateRunResponse{
 			RunID: run.ID.String(),
-			JobID: jobID.String(),
 		})
 	}
 }

@@ -30,7 +30,7 @@ RETURNING id, user_id, title, content_text, created_at, updated_at`
 		&res.Title,
 		&res.ContentText,
 		&res.CreatedAt,
-		&res.UpadatedAt,
+		&res.UpdatedAt,
 	)
 	if err != nil {
 		return Resume{}, err
@@ -52,7 +52,7 @@ WHERE id = $1`
 		&res.Title,
 		&res.ContentText,
 		&res.CreatedAt,
-		&res.UpadatedAt,
+		&res.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -98,7 +98,7 @@ OFFSET $3`
 			&res.Title,
 			&res.ContentText,
 			&res.CreatedAt,
-			&res.UpadatedAt,
+			&res.UpdatedAt,
 		)
 		if err != nil {
 			return nil, err

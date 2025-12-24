@@ -6,16 +6,20 @@ import (
 	"fmt"
 	"strings"
 
+	"resume-tailor/internal/jobs"
+
 	"github.com/google/uuid"
 )
 
 type Service struct {
-	repo *Repo
+	repo      *Repo
+	jobsEnq   jobs.JobsEnqueuer
 }
 
-func NewService(repo *Repo) *Service {
+func NewService(repo *Repo, jobsEnq jobs.JobsEnqueuer) *Service {
 	return &Service{
-		repo: repo,
+		repo:    repo,
+		jobsEnq: jobsEnq,
 	}
 }
 
@@ -40,7 +44,14 @@ func (s *Service) CreateRun(ctx context.Context, userID,
 	run, err := s.repo.CreateRun(ctx, userID, resumeID, jobText)
 	if err != nil {
 		return Run{}, err
+	}
 
+	// Enqueue job for processing
+	if s.jobsEnq != nil {
+		_, err = s.jobsEnq.EnqueueProcessRun(ctx, run.ID)
+		if err != nil {
+			return Run{}, fmt.Errorf("failed to enqueue job: %w", err)
+		}
 	}
 
 	return run, nil

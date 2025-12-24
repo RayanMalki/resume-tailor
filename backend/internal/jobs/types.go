@@ -34,5 +34,6 @@ const (
 
 var (
 	ErrJobNotFound = errors.New("job not found")
+	ErrNoJobs      = errors.New("no jobs available")
 )
 

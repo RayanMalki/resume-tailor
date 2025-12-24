@@ -13,7 +13,8 @@ const (
 	StatusCreated    Status = "created"
 	StatusQueued     Status = "queued"
 	StatusProcessing Status = "processing"
-	StatusFailed     Status = "Failed"
+	StatusFailed     Status = "failed"
+	StatusCompleted  Status = "completed"
 )
 
 type Run struct {

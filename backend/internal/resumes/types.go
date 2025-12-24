@@ -13,7 +13,7 @@ type Resume struct {
 	Title       string
 	ContentText string
 	CreatedAt   time.Time
-	UpadatedAt  time.Time
+	UpdatedAt   time.Time
 }
 
 var (
