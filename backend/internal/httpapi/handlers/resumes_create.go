@@ -55,4 +55,3 @@ func CreateResumeHandler(resumesSvc *resumes.Service) http.HandlerFunc {
 		writeJSON(w, http.StatusCreated, resp)
 	}
 }
-
