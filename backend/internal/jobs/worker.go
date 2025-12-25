@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"time"
 
+	"resume-tailor/internal/runreports"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -22,16 +24,18 @@ const (
 )
 
 type Worker struct {
-	jobsRepo *Repo
-	db       *pgxpool.Pool
-	workerID string
+	jobsRepo     *Repo
+	db           *pgxpool.Pool
+	workerID     string
+	reportsSvc   *runreports.Service
 }
 
-func NewWorker(jobsRepo *Repo, db *pgxpool.Pool, workerID string) *Worker {
+func NewWorker(jobsRepo *Repo, db *pgxpool.Pool, workerID string, reportsSvc *runreports.Service) *Worker {
 	return &Worker{
-		jobsRepo: jobsRepo,
-		db:       db,
-		workerID: workerID,
+		jobsRepo:   jobsRepo,
+		db:         db,
+		workerID:   workerID,
+		reportsSvc: reportsSvc,
 	}
 }
 
@@ -124,13 +128,11 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 
 	// Placeholder JSON for reports
 	atsReport := map[string]interface{}{
-		"score":     85,
-		"message":   "placeholder ATS report",
-		"timestamp": time.Now().Unix(),
+		"score":  0.75,
+		"notes":  []string{"placeholder"},
 	}
 	changePlan := map[string]interface{}{
-		"changes":   []string{"placeholder change 1", "placeholder change 2"},
-		"timestamp": time.Now().Unix(),
+		"changes": []string{"placeholder"},
 	}
 
 	atsReportJSON, err := json.Marshal(atsReport)
@@ -143,16 +145,11 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		return fmt.Errorf("failed to marshal change plan: %w", err)
 	}
 
-	// Insert into run_reports
-	const insertReportQ = `
-INSERT INTO run_reports (run_id, ats_report, change_plan)
-VALUES ($1, $2, $3)
-ON CONFLICT (run_id) DO UPDATE
-SET ats_report = $2, change_plan = $3, created_at = now()`
-
-	_, err = w.db.Exec(ctx, insertReportQ, runID, atsReportJSON, changePlanJSON)
-	if err != nil {
-		return fmt.Errorf("failed to insert run report: %w", err)
+	// Insert into run_reports using service
+	if w.reportsSvc != nil {
+		if err := w.reportsSvc.UpsertRunReport(ctx, runID, atsReportJSON, changePlanJSON); err != nil {
+			return fmt.Errorf("failed to upsert run report: %w", err)
+		}
 	}
 
 	// Placeholder JSON for artifacts

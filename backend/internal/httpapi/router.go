@@ -7,12 +7,13 @@ import (
 	"resume-tailor/internal/httpapi/handlers"
 	"resume-tailor/internal/httpapi/middleware"
 	"resume-tailor/internal/resumes"
+	"resume-tailor/internal/runreports"
 	"resume-tailor/internal/runs"
 
 	"github.com/go-chi/chi/v5"
 )
 
-func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes.Service) http.Handler {
+func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes.Service, reportsSvc *runreports.Service) http.Handler {
 	r := chi.NewRouter()
 
 	// Global middleware
@@ -36,7 +37,10 @@ func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes
 			//GET request
 			r.Get("/me", handlers.Me())
 			r.Get("/runs/{runID}", handlers.GetRunByIdHandler(runsSvc))
+			r.Get("/runs/{runID}/report", handlers.GetRunReportHandler(runsSvc, reportsSvc))
 			r.Get("/runs", handlers.ListRunsHandler(runsSvc))
+			r.Get("/resumes", handlers.ListResumesHandler(resumesSvc))
+			r.Get("/resumes/{resumeID}", handlers.GetResumeByIDHandler(resumesSvc))
 
 			//POST request
 			r.Post("/runs", handlers.CreateRunHandler(runsSvc, resumesSvc))

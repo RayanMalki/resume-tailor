@@ -15,6 +15,7 @@ import (
 	"resume-tailor/internal/httpapi"
 	"resume-tailor/internal/jobs"
 	"resume-tailor/internal/resumes"
+	"resume-tailor/internal/runreports"
 	"resume-tailor/internal/runs"
 )
 
@@ -40,8 +41,10 @@ func main() {
 	runsSvc := runs.NewService(runsRepo, jobsRepo)
 	resumesRepo := resumes.NewRepo(pool)
 	resumesSvc := resumes.NewService(resumesRepo)
+	runreportsRepo := runreports.NewRepo(pool)
+	runreportsSvc := runreports.NewService(runreportsRepo)
 
-	router := httpapi.NewRouter(authSvc, runsSvc, resumesSvc)
+	router := httpapi.NewRouter(authSvc, runsSvc, resumesSvc, runreportsSvc)
 
 	srv := &http.Server{
 		Addr:    cfg.HTTPAddr,

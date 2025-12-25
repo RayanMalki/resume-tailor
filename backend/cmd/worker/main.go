@@ -10,6 +10,7 @@ import (
 	"resume-tailor/internal/config"
 	"resume-tailor/internal/db"
 	"resume-tailor/internal/jobs"
+	"resume-tailor/internal/runreports"
 )
 
 func main() {
@@ -29,7 +30,9 @@ func main() {
 	defer db.Close(pool)
 
 	jobsRepo := jobs.NewRepo(pool)
-	worker := jobs.NewWorker(jobsRepo, pool, cfg.WorkerID)
+	runreportsRepo := runreports.NewRepo(pool)
+	runreportsSvc := runreports.NewService(runreportsRepo)
+	worker := jobs.NewWorker(jobsRepo, pool, cfg.WorkerID, runreportsSvc)
 
 	// Handle graceful shutdown
 	ctx, cancel := context.WithCancel(ctx)
