@@ -6,16 +6,20 @@ import (
 )
 
 type Config struct {
-	DatabaseURL string
-	HTTPAddr    string
-	WorkerID    string
+	DatabaseURL  string
+	HTTPAddr     string
+	WorkerID     string
+	OpenAIAPIKey string
+	OpenAIModel  string
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		HTTPAddr:    os.Getenv("HTTP_ADDR"),
-		WorkerID:    os.Getenv("WORKER_ID"),
+		DatabaseURL:  os.Getenv("DATABASE_URL"),
+		HTTPAddr:     os.Getenv("HTTP_ADDR"),
+		WorkerID:     os.Getenv("WORKER_ID"),
+		OpenAIAPIKey: os.Getenv("OPENAI_API_KEY"),
+		OpenAIModel:  os.Getenv("OPENAI_MODEL"),
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -28,6 +32,10 @@ func Load() (Config, error) {
 
 	if cfg.WorkerID == "" {
 		cfg.WorkerID = "worker-1"
+	}
+
+	if cfg.OpenAIModel == "" {
+		cfg.OpenAIModel = "gpt-4o-mini"
 	}
 
 	return cfg, nil
