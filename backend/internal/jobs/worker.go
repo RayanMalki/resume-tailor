@@ -7,7 +7,10 @@ import (
 	"log/slog"
 	"time"
 
+	"resume-tailor/internal/ai"
+	"resume-tailor/internal/resumes"
 	"resume-tailor/internal/runreports"
+	"resume-tailor/internal/scoring/bm25"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -23,19 +26,39 @@ const (
 	runStatusCompleted  = "completed"
 )
 
-type Worker struct {
-	jobsRepo     *Repo
-	db           *pgxpool.Pool
-	workerID     string
-	reportsSvc   *runreports.Service
+// RunsRepo is an interface to avoid import cycle with runs package
+type RunsRepo interface {
+	GetRunByID(ctx context.Context, runID uuid.UUID) (RunData, error)
 }
 
-func NewWorker(jobsRepo *Repo, db *pgxpool.Pool, workerID string, reportsSvc *runreports.Service) *Worker {
+// RunData represents the run data needed by the worker
+type RunData struct {
+	ID           uuid.UUID
+	ResumeID     uuid.UUID
+	JobText      string
+	Status       string
+	ErrorMessage *string
+}
+
+type Worker struct {
+	jobsRepo    *Repo
+	db          *pgxpool.Pool
+	workerID    string
+	reportsSvc  *runreports.Service
+	runsRepo    RunsRepo
+	resumesRepo *resumes.Repo
+	aiClient    *ai.Client
+}
+
+func NewWorker(jobsRepo *Repo, db *pgxpool.Pool, workerID string, reportsSvc *runreports.Service, runsRepo RunsRepo, resumesRepo *resumes.Repo, aiClient *ai.Client) *Worker {
 	return &Worker{
-		jobsRepo:   jobsRepo,
-		db:         db,
-		workerID:   workerID,
-		reportsSvc: reportsSvc,
+		jobsRepo:    jobsRepo,
+		db:          db,
+		workerID:    workerID,
+		reportsSvc:  reportsSvc,
+		runsRepo:    runsRepo,
+		resumesRepo: resumesRepo,
+		aiClient:    aiClient,
 	}
 }
 
@@ -83,12 +106,12 @@ func (w *Worker) processNextJob(ctx context.Context) error {
 	if err := w.processRun(ctx, job.RunID); err != nil {
 		slog.Error("failed to process run", "error", err, "run_id", job.RunID)
 		errorMsg := err.Error()
-		
+
 		// Update run status to failed
 		if err := w.updateRunStatus(ctx, job.RunID, runStatusFailed, &errorMsg); err != nil {
 			slog.Error("failed to update run status to failed", "error", err, "run_id", job.RunID)
 		}
-		
+
 		// Update job status
 		requeue := job.Attempts < job.MaxAttempts
 		if err := w.jobsRepo.MarkJobFailed(ctx, job.ID, errorMsg, requeue); err != nil {
@@ -115,26 +138,40 @@ func (w *Worker) processNextJob(ctx context.Context) error {
 }
 
 func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
-	// MVP stub: pretend we generated something
-	// In a real implementation, this would:
-	// 1. Fetch the run and resume data
-	// 2. Process the resume with the job text
-	// 3. Generate ATS report and change plan
-	// 4. Generate resume spec, LaTeX, and PDF
-	// 5. Insert into run_reports and run_artifacts
-
-	// For MVP, we'll insert placeholder JSON into run_reports and run_artifacts
-	// This ensures the schema is consistent
-
-	// Placeholder JSON for reports
-	atsReport := map[string]interface{}{
-		"score":  0.75,
-		"notes":  []string{"placeholder"},
-	}
-	changePlan := map[string]interface{}{
-		"changes": []string{"placeholder"},
+	// Check if AI client is available
+	if w.aiClient == nil {
+		return fmt.Errorf("OPENAI_API_KEY missing")
 	}
 
+	// 1. Load the run
+	runData, err := w.runsRepo.GetRunByID(ctx, runID)
+	if err != nil {
+		return fmt.Errorf("failed to load run: %w", err)
+	}
+
+	// 2. Load the resume
+	resume, err := w.resumesRepo.GetResumeByID(ctx, runData.ResumeID)
+	if err != nil {
+		return fmt.Errorf("failed to load resume: %w", err)
+	}
+
+	resumeText := resume.ContentText
+	jobText := runData.JobText
+
+	// 3. Compute BM25 signals (stub for now)
+	bm25Signals, err := bm25.Compute(resumeText, jobText)
+	if err != nil {
+		slog.Warn("BM25 computation failed, continuing without signals", "error", err, "run_id", runID)
+		bm25Signals = nil
+	}
+
+	// 4. Generate ATS report and change plan via OpenAI
+	atsReport, changePlan, err := w.aiClient.GenerateRunReport(ctx, resumeText, jobText, bm25Signals)
+	if err != nil {
+		return fmt.Errorf("failed to generate run report: %w", err)
+	}
+
+	// 5. Marshal to JSON
 	atsReportJSON, err := json.Marshal(atsReport)
 	if err != nil {
 		return fmt.Errorf("failed to marshal ATS report: %w", err)
@@ -145,14 +182,14 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		return fmt.Errorf("failed to marshal change plan: %w", err)
 	}
 
-	// Insert into run_reports using service
+	// 6. Persist into run_reports
 	if w.reportsSvc != nil {
 		if err := w.reportsSvc.UpsertRunReport(ctx, runID, atsReportJSON, changePlanJSON); err != nil {
 			return fmt.Errorf("failed to upsert run report: %w", err)
 		}
 	}
 
-	// Placeholder JSON for artifacts
+	// Placeholder JSON for artifacts (LaTeX/PDF generation not implemented yet)
 	resumeSpec := map[string]interface{}{
 		"version":   "1.0",
 		"sections":  []string{"placeholder section"},
