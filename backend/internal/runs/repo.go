@@ -27,7 +27,7 @@ RETURNING id, user_id, resume_id, job_text, status, error_message, created_at, u
 `
 
 	var run Run
-	err := r.db.QueryRow(ctx, q, userID, resumeID, jobText, StatusCreated).Scan(
+	err := r.db.QueryRow(ctx, q, userID, resumeID, jobText, StatusQueued).Scan(
 		&run.ID,
 		&run.UserID,
 		&run.ResumeID,
