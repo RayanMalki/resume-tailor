@@ -19,4 +19,3 @@ var (
 	ErrRunReportNotFound = errors.New("run report not found")
 	ErrBadInput          = errors.New("bad input")
 )
-

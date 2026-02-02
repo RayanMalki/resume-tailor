@@ -114,8 +114,13 @@ func (c *Client) buildPrompt(resumeText, jobText string, bm25Signals any) string
 
 	if bm25Signals != nil {
 		b.WriteString("BM25 SIGNALS:\n")
-		// If bm25Signals is a struct, we could marshal it, but for now just note it
-		b.WriteString("(BM25 analysis available)\n\n")
+		serialized, err := json.MarshalIndent(bm25Signals, "", "  ")
+		if err != nil {
+			b.WriteString("(BM25 analysis available, failed to serialize)\n\n")
+		} else {
+			b.WriteString(string(serialized))
+			b.WriteString("\n\n")
+		}
 	}
 
 	b.WriteString("Respond with a JSON object in this exact format:\n")
@@ -129,5 +134,68 @@ func (c *Client) buildPrompt(resumeText, jobText string, bm25Signals any) string
   }
 }`)
 
+	return b.String()
+}
+
+// GenerateResumeLatex generates a Jake's Resume-style LaTeX output tailored to the job.
+func (c *Client) GenerateResumeLatex(ctx context.Context, resumeText, jobText string, bm25Signals any) (string, error) {
+	prompt := buildResumeLatexPrompt(resumeText, jobText, bm25Signals)
+
+	req := openai.ChatCompletionNewParams{
+		Model: c.model,
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage("You are a resume writer. Return ONLY LaTeX code, no commentary."),
+			openai.UserMessage(prompt),
+		},
+	}
+
+	resp, err := c.client.Chat.Completions.New(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("OpenAI API error: %w", err)
+	}
+
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("no choices in OpenAI response")
+	}
+
+	content := strings.TrimSpace(resp.Choices[0].Message.Content)
+	if content == "" {
+		return "", fmt.Errorf("empty content in OpenAI response")
+	}
+
+	return content, nil
+}
+
+func buildResumeLatexPrompt(resumeText, jobText string, bm25Signals any) string {
+	var b strings.Builder
+	b.WriteString("Return ONLY LaTeX. No ``` fences. No explanations.\\n")
+	b.WriteString("Use Jake's Resume-style one-column layout with compact sections and bullets.\\n")
+	b.WriteString("Sections in this order: Education, Experience, Projects, Skills.\\n")
+	b.WriteString("Keep bullet points concise and impact-focused.\\n")
+	b.WriteString("The resume MUST fit on ONE page. If needed, reduce bullets, shorten phrasing, or drop least-relevant items to stay on one page.\\n")
+	b.WriteString("Use the pattern: \"Did X using Y resulting in Z\" for experience and project bullets.\\n")
+	b.WriteString("Bold technical skills/keywords (e.g., languages, frameworks, tools, platforms) using \\\\textbf{...}, especially in project/experience bullets. Do not bold non-technical words.\\n")
+	b.WriteString("Tailor to the job description. Use the resume content as the source.\\n\\n")
+
+	b.WriteString("RESUME:\\n")
+	b.WriteString(resumeText)
+	b.WriteString("\\n\\n")
+
+	b.WriteString("JOB DESCRIPTION:\\n")
+	b.WriteString(jobText)
+	b.WriteString("\\n\\n")
+
+	if bm25Signals != nil {
+		b.WriteString("BM25 SIGNALS:\\n")
+		serialized, err := json.MarshalIndent(bm25Signals, "", "  ")
+		if err != nil {
+			b.WriteString("(BM25 analysis available, failed to serialize)\\n\\n")
+		} else {
+			b.WriteString(string(serialized))
+			b.WriteString("\\n\\n")
+		}
+	}
+
+	b.WriteString("Return LaTeX only.")
 	return b.String()
 }

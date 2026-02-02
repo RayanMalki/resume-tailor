@@ -8,17 +8,17 @@ import (
 )
 
 type Job struct {
-	ID         uuid.UUID
-	Type       string
-	RunID      uuid.UUID
-	Status     string
-	Attempts   int
+	ID          uuid.UUID
+	Type        string
+	RunID       uuid.UUID
+	Status      string
+	Attempts    int
 	MaxAttempts int
-	LockedBy   *string
-	LockedAt   *time.Time
-	LastError  *string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	LockedBy    *string
+	LockedAt    *time.Time
+	LastError   *string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 const (
@@ -36,4 +36,3 @@ var (
 	ErrJobNotFound = errors.New("job not found")
 	ErrNoJobs      = errors.New("no jobs available")
 )
-

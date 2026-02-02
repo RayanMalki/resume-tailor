@@ -72,4 +72,3 @@ func writeUnauthorized(w http.ResponseWriter) {
 		"error": "unauthorized",
 	})
 }
-

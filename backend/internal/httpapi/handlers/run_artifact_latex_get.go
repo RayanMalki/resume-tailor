@@ -4,15 +4,19 @@ import (
 	"errors"
 	"net/http"
 
+	"resume-tailor/internal/artifacts"
 	"resume-tailor/internal/httpapi/middleware"
-	"resume-tailor/internal/runreports"
 	"resume-tailor/internal/runs"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
-func GetRunReportHandler(runsSvc *runs.Service, reportsSvc *runreports.Service) http.HandlerFunc {
+type latexArtifactResponse struct {
+	Latex string `json:"latex"`
+}
+
+func GetResumeLatexArtifactHandler(runsSvc *runs.Service, artifactsSvc *artifacts.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := middleware.UserIDFromContext(r.Context())
 		if !ok {
@@ -27,7 +31,6 @@ func GetRunReportHandler(runsSvc *runs.Service, reportsSvc *runreports.Service) 
 			return
 		}
 
-		// Ownership check: ensure the run belongs to the user
 		_, err = runsSvc.GetRunByID(r.Context(), userID, runID)
 		if err != nil {
 			if errors.Is(err, runs.ErrRunNotFound) {
@@ -38,17 +41,16 @@ func GetRunReportHandler(runsSvc *runs.Service, reportsSvc *runreports.Service) 
 			return
 		}
 
-		// Fetch report
-		report, err := reportsSvc.GetRunReportByRunID(r.Context(), runID)
+		artifact, err := artifactsSvc.GetByRunIDAndType(r.Context(), runID, artifacts.TypeResumeLatex)
 		if err != nil {
-			if errors.Is(err, runreports.ErrRunReportNotFound) {
-				writeError(w, http.StatusNotFound, "report not ready")
+			if errors.Is(err, artifacts.ErrArtifactNotFound) {
+				writeError(w, http.StatusNotFound, "not ready")
 				return
 			}
 			writeError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
-		writeJSON(w, http.StatusOK, report)
+		writeJSON(w, http.StatusOK, latexArtifactResponse{Latex: artifact.Content})
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"resume-tailor/internal/ai"
+	"resume-tailor/internal/artifacts"
 	"resume-tailor/internal/resumes"
 	"resume-tailor/internal/runreports"
 	"resume-tailor/internal/scoring/bm25"
@@ -48,9 +49,10 @@ type Worker struct {
 	runsRepo    RunsRepo
 	resumesRepo *resumes.Repo
 	aiClient    *ai.Client
+	artifacts   *artifacts.Service
 }
 
-func NewWorker(jobsRepo *Repo, db *pgxpool.Pool, workerID string, reportsSvc *runreports.Service, runsRepo RunsRepo, resumesRepo *resumes.Repo, aiClient *ai.Client) *Worker {
+func NewWorker(jobsRepo *Repo, db *pgxpool.Pool, workerID string, reportsSvc *runreports.Service, runsRepo RunsRepo, resumesRepo *resumes.Repo, aiClient *ai.Client, artifactsSvc *artifacts.Service) *Worker {
 	return &Worker{
 		jobsRepo:    jobsRepo,
 		db:          db,
@@ -59,6 +61,7 @@ func NewWorker(jobsRepo *Repo, db *pgxpool.Pool, workerID string, reportsSvc *ru
 		runsRepo:    runsRepo,
 		resumesRepo: resumesRepo,
 		aiClient:    aiClient,
+		artifacts:   artifactsSvc,
 	}
 }
 
@@ -143,14 +146,27 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		return fmt.Errorf("OPENAI_API_KEY missing")
 	}
 
-	// Idempotency: if report already exists, skip regeneration.
+	reportExists := false
 	if w.reportsSvc != nil {
 		if _, err := w.reportsSvc.GetRunReportByRunID(ctx, runID); err == nil {
-			slog.Info("run report already exists, skipping regeneration", "run_id", runID)
-			return nil
+			reportExists = true
 		} else if err != nil && err != runreports.ErrRunReportNotFound {
 			return fmt.Errorf("failed to check existing run report: %w", err)
 		}
+	}
+
+	latexExists := false
+	if w.artifacts != nil {
+		if _, err := w.artifacts.GetByRunIDAndType(ctx, runID, artifacts.TypeResumeLatex); err == nil {
+			latexExists = true
+		} else if err != nil && err != artifacts.ErrArtifactNotFound {
+			return fmt.Errorf("failed to check existing latex artifact: %w", err)
+		}
+	}
+
+	if reportExists && latexExists {
+		slog.Info("run report and latex artifact already exist, skipping", "run_id", runID)
+		return nil
 	}
 
 	// 1. Load the run
@@ -178,9 +194,13 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 	}
 
 	// 4. Generate ATS report and change plan via OpenAI
-	atsReport, changePlan, err := w.aiClient.GenerateRunReport(ctx, resumeText, jobText, bm25Signals)
-	if err != nil {
-		return fmt.Errorf("failed to generate run report: %w", err)
+	var atsReport ai.ATSReport
+	var changePlan ai.ChangePlan
+	if !reportExists {
+		atsReport, changePlan, err = w.aiClient.GenerateRunReport(ctx, resumeText, jobText, bm25Signals)
+		if err != nil {
+			return fmt.Errorf("failed to generate run report: %w", err)
+		}
 	}
 
 	reportSignals := bm25.Signals{}
@@ -188,29 +208,41 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		reportSignals = *bm25Signals
 	}
 
-	reportPayload := reportPayload{
-		ReportVersion: 1,
-		GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
-		BM25Signals:   reportSignals,
-		ATSReport:     atsReport,
-		ChangePlan:    changePlan,
+	if !reportExists {
+		reportPayload := reportPayload{
+			ReportVersion: 1,
+			GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
+			BM25Signals:   reportSignals,
+			ATSReport:     atsReport,
+			ChangePlan:    changePlan,
+		}
+
+		// 5. Marshal to JSON
+		atsReportJSON, err := json.Marshal(reportPayload)
+		if err != nil {
+			return fmt.Errorf("failed to marshal ATS report: %w", err)
+		}
+
+		changePlanJSON, err := json.Marshal(changePlan)
+		if err != nil {
+			return fmt.Errorf("failed to marshal change plan: %w", err)
+		}
+
+		// 6. Persist into run_reports
+		if w.reportsSvc != nil {
+			if err := w.reportsSvc.UpsertRunReport(ctx, runID, atsReportJSON, changePlanJSON); err != nil {
+				return fmt.Errorf("failed to upsert run report: %w", err)
+			}
+		}
 	}
 
-	// 5. Marshal to JSON
-	atsReportJSON, err := json.Marshal(reportPayload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal ATS report: %w", err)
-	}
-
-	changePlanJSON, err := json.Marshal(changePlan)
-	if err != nil {
-		return fmt.Errorf("failed to marshal change plan: %w", err)
-	}
-
-	// 6. Persist into run_reports
-	if w.reportsSvc != nil {
-		if err := w.reportsSvc.UpsertRunReport(ctx, runID, atsReportJSON, changePlanJSON); err != nil {
-			return fmt.Errorf("failed to upsert run report: %w", err)
+	if !latexExists && w.artifacts != nil {
+		latex, err := w.aiClient.GenerateResumeLatex(ctx, resumeText, jobText, bm25Signals)
+		if err != nil {
+			return fmt.Errorf("failed to generate resume latex: %w", err)
+		}
+		if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeResumeLatex, latex); err != nil {
+			return fmt.Errorf("failed to store resume latex: %w", err)
 		}
 	}
 
@@ -274,6 +306,8 @@ func safeErrorMessage(err error) string {
 		return "ai_client_unavailable"
 	case strings.Contains(msg, "generate run report"):
 		return "report_generation_failed"
+	case strings.Contains(msg, "generate resume latex"):
+		return "latex_generation_failed"
 	case strings.Contains(msg, "load resume"):
 		return "resume_load_failed"
 	case strings.Contains(msg, "load run"):

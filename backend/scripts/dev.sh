@@ -28,55 +28,29 @@ require_bin() {
 require_env DATABASE_URL
 require_env OPENAI_API_KEY
 require_bin docker
-require_bin curl
 require_bin go
+require_bin npm
 
 API_BASE_URL="${API_BASE_URL:-http://localhost:8080}"
-OPENAI_MODEL="${OPENAI_MODEL:-}"
+
+export GOCACHE="${GOCACHE:-/tmp/go-build}"
 
 cleanup() {
   local exit_code=$?
   set +e
-  if [[ $exit_code -ne 0 && -n "${WORK_DIR:-}" ]]; then
-    if [[ -f "$WORK_DIR/api.log" ]]; then
-      echo "--- api log ---" >&2
-      tail -n 200 "$WORK_DIR/api.log" >&2 || true
-    fi
-    if [[ -f "$WORK_DIR/worker.log" ]]; then
-      echo "--- worker log ---" >&2
-      tail -n 200 "$WORK_DIR/worker.log" >&2 || true
-    fi
-  fi
   if [[ -n "${API_PID:-}" ]]; then
     kill "$API_PID" >/dev/null 2>&1 || true
   fi
   if [[ -n "${WORKER_PID:-}" ]]; then
     kill "$WORKER_PID" >/dev/null 2>&1 || true
   fi
-  if [[ -n "${WORK_DIR:-}" && -d "$WORK_DIR" ]]; then
-    if [[ $exit_code -eq 0 ]]; then
-      rm -rf "$WORK_DIR"
-    else
-      echo "Logs preserved at $WORK_DIR" >&2
-    fi
+  if [[ -n "${WEB_PID:-}" ]]; then
+    kill "$WEB_PID" >/dev/null 2>&1 || true
   fi
-  docker compose -f "$ROOT_DIR/docker-compose.yml" down -v >/dev/null 2>&1 || true
+  docker compose -f "$ROOT_DIR/docker-compose.yml" down >/dev/null 2>&1 || true
   exit "$exit_code"
 }
 trap cleanup EXIT
-
-WORK_DIR="$(mktemp -d)"
-export GOCACHE="${GOCACHE:-/tmp/go-build}"
-
-run_gofmt_check() {
-  local unformatted
-  unformatted=$(gofmt -l "$ROOT_DIR")
-  if [[ -n "$unformatted" ]]; then
-    echo "ERROR: gofmt found unformatted files:" >&2
-    echo "$unformatted" >&2
-    exit 1
-  fi
-}
 
 wait_for_db() {
   local retries=60
@@ -111,16 +85,13 @@ apply_migrations() {
   done
 }
 
-start_services() {
-  local api_log="$WORK_DIR/api.log"
-  local worker_log="$WORK_DIR/worker.log"
-
-  DATABASE_URL="$DATABASE_URL" OPENAI_API_KEY="$OPENAI_API_KEY" OPENAI_MODEL="$OPENAI_MODEL" \
-    go run ./cmd/api >"$api_log" 2>&1 &
+start_api_worker() {
+  DATABASE_URL="$DATABASE_URL" OPENAI_API_KEY="$OPENAI_API_KEY" OPENAI_MODEL="${OPENAI_MODEL:-}" \
+    go run ./cmd/api > /tmp/rt_api.log 2>&1 &
   API_PID=$!
 
-  DATABASE_URL="$DATABASE_URL" OPENAI_API_KEY="$OPENAI_API_KEY" OPENAI_MODEL="$OPENAI_MODEL" \
-    go run ./cmd/worker >"$worker_log" 2>&1 &
+  DATABASE_URL="$DATABASE_URL" OPENAI_API_KEY="$OPENAI_API_KEY" OPENAI_MODEL="${OPENAI_MODEL:-}" \
+    go run ./cmd/worker > /tmp/rt_worker.log 2>&1 &
   WORKER_PID=$!
 
   local retries=60
@@ -134,35 +105,44 @@ start_services() {
   done
 
   echo "ERROR: API did not become healthy" >&2
-  echo "--- api log ---" >&2
-  tail -n 200 "$api_log" >&2 || true
-  echo "--- worker log ---" >&2
-  tail -n 200 "$worker_log" >&2 || true
+  tail -n 200 /tmp/rt_api.log >&2 || true
   exit 1
 }
 
+start_web() {
+  if [[ ! -d "$ROOT_DIR/web" ]]; then
+    echo "ERROR: web directory not found" >&2
+    exit 1
+  fi
+
+  if [[ ! -d "$ROOT_DIR/web/node_modules" ]]; then
+    (cd "$ROOT_DIR/web" && npm install)
+  fi
+
+  (cd "$ROOT_DIR/web" && NEXT_PUBLIC_API_BASE_URL="$API_BASE_URL" npm run dev) > /tmp/rt_web.log 2>&1 &
+  WEB_PID=$!
+}
+
 main() {
-  echo "==> gofmt check"
-  run_gofmt_check
-
-  echo "==> go test ./..."
-  go test ./...
-
-  echo "==> start database"
-  docker compose -f "$ROOT_DIR/docker-compose.yml" down -v >/dev/null 2>&1 || true
+  echo "==> starting database"
   docker compose -f "$ROOT_DIR/docker-compose.yml" up -d
   wait_for_db
 
-  echo "==> apply migrations"
+  echo "==> applying migrations"
   apply_migrations
 
-  echo "==> start api + worker"
-  start_services
+  echo "==> starting api + worker"
+  start_api_worker
 
-  echo "==> smoke test"
-  "$ROOT_DIR/scripts/smoke_e2e.sh"
+  echo "==> starting web"
+  start_web
 
-  echo "==> verify complete"
+  echo "==> ready"
+  echo "API:  $API_BASE_URL"
+  echo "WEB:  http://localhost:3000"
+  echo "Logs: /tmp/rt_api.log /tmp/rt_worker.log /tmp/rt_web.log"
+
+  wait
 }
 
 main

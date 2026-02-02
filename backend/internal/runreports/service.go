@@ -31,4 +31,3 @@ func (s *Service) UpsertRunReport(ctx context.Context, runID uuid.UUID, atsRepor
 
 	return s.repo.UpsertRunReport(ctx, runID, atsReport, changePlan)
 }
-

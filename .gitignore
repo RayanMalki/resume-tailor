@@ -12,3 +12,4 @@ backend/api
 backend/worker
 backend/api
 backend/api
+.DS_Store
