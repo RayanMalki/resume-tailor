@@ -33,7 +33,11 @@ func Load() (Config, error) {
 	}
 
 	if cfg.HTTPAddr == "" {
-		cfg.HTTPAddr = ":8080"
+		if port := os.Getenv("PORT"); port != "" {
+			cfg.HTTPAddr = ":" + port
+		} else {
+			cfg.HTTPAddr = ":8080"
+		}
 	}
 
 	if cfg.WorkerID == "" {
