@@ -1,69 +1,103 @@
+@ -0,0 +1,102 @@
 # Resume Tailor (WIP)
 
-Resume Tailor is a backend-first project that generates an **ATS-style report** and a **prioritized change plan** by comparing a resume to a job description. The focus is on building something **production-oriented**: authenticated access, run-based processing, and reproducible outputs.
+Resume Tailor is a backend-first system that compares a resume to a job description and produces two outputs: an ATS-style scorecard and a prioritized change plan. It is built like a product (auth, runs, background jobs, persistence), not a script.
 
-> **Status:** 🚧 Under active development — not deployed yet.
+Status: under active development. Not deployed yet.
 
----
+## Highlights
+- End-to-end run pipeline: create run -> queue job -> worker generates outputs -> fetch report/artifacts.
+- Authenticated API with session cookies (HttpOnly) and ownership checks on every private resource.
+- Structured ATS report + change plan generated with OpenAI, validated before storage.
+- BM25 term-signal layer for explainable keyword coverage (missing, overlap, top terms).
+- LaTeX resume generation stored as an artifact for each run (PDF compilation planned).
+- Postgres schema for runs, reports, artifacts, jobs, and optional subscription/usage tracking.
 
-## What it does (today)
-- Accepts **resume text** + **job posting text**
-- Creates a **run** and processes it with a **worker**
-- Produces and stores a **run report** that can be fetched via a protected API endpoint
+## Architecture
+```mermaid
+flowchart TB
+  UI["Next.js Web UI (optional)"]
+  API["API Server<br/>Auth, runs, reports, artifacts, resumes"]
+  DB[("Postgres<br/>users/sessions/runs/jobs/reports/artifacts")]
+  WORKER["Worker<br/>BM25 + OpenAI"]
 
----
+  UI --> API
+  API --> DB
+  WORKER --> DB
+```
 
-## What I’ve already built
-### ✅ Authentication (done)
-- Session-based auth using an **HttpOnly cookie** (SameSite + expiration)
-- Auth routes (signup/login/logout)
-- Middleware to protect private endpoints (e.g., fetching reports)
+## What is implemented
+### Auth and access control
+- Signup/login/logout with session cookies.
+- Passwords hashed with bcrypt; session tokens are stored as hashes.
+- Auth middleware protects private endpoints and enforces ownership.
 
-### ✅ Run pipeline + worker processing (done)
-- A run lifecycle (created → processing → completed/failed)
-- Worker processes runs end-to-end:
-  - loads inputs
-  - generates/stores report output
-  - updates run status
-- Persistent storage for run outputs (e.g., `run_reports`)
-- Protected endpoint to retrieve a completed report:
-  - `GET /v1/runs/{runID}/report`
+### Run processing pipeline
+- Runs move through queued -> running -> succeeded/failed.
+- Database-backed job queue with retries.
+- Worker loads resume + job text, computes BM25 signals, calls OpenAI, stores outputs.
 
----
+### Outputs
+- ATS report + change plan stored in `run_reports`.
+- Resume LaTeX stored in `run_artifacts_items` as `resume_latex`.
+- Artifact metadata (paths/placeholders) stored in `run_artifacts` for future PDF pipeline.
 
-## What’s next (remaining work)
-### 🔄 BM25 algorithm (in progress / next)
-- Implement a **custom BM25** scoring layer to produce transparent keyword/coverage signals
-- Use BM25 results to drive better, more explainable recommendations (not just generic LLM advice)
+### Frontend (basic UI)
+- Next.js app for login, resume input, job input, and LaTeX results polling.
+- Uses cookie-based auth and polls the artifact endpoint until ready.
 
-### 🔄 LLM path (in progress / next)
-- Integrate the LLM step into the worker (or refine it if it’s currently a placeholder):
-  - generate structured outputs (ATS report + change plan)
-  - ensure predictable formatting + schema validation
-  - add tests and prompt/versioning so outputs are stable over time
+## API (v1)
+All private endpoints require a session cookie.
 
-### 🔄 Server-side LaTeX compilation (planned)
-- Generate LaTeX from the change plan / improved resume
-- Compile on the server to produce a downloadable artifact (PDF)
-- Store generated artifacts per run (e.g., `run_artifacts`)
+Auth
+- `POST /v1/auth/signup`
+- `POST /v1/auth/login`
+- `POST /v1/auth/logout`
+- `GET  /v1/me`
 
-### 🔄 Frontend (planned)
-- UI to:
-  - submit resume + job text
-  - track run status
-  - view report + change plan
-  - download compiled PDF artifact
+Runs
+- `POST /v1/runs` (create run)
+- `GET  /v1/runs` (list runs)
+- `GET  /v1/runs/{runID}`
+- `GET  /v1/runs/{runID}/report`
+- `GET  /v1/runs/{runID}/artifacts/resume-latex`
 
----
+Resumes
+- `POST /v1/resumes` (text resume MVP)
+- `GET  /v1/resumes`
+- `GET  /v1/resumes/{resumeID}`
 
-## Deployment goal
-Once BM25 + LLM + LaTeX compilation are stable, the plan is to deploy the system as:
-- **API server**
-- **worker**
-- **database + storage** (for reports/artifacts)
-with proper environment-based config, logging, and production-safe auth/cookie settings.
+## Local development
+Prereqs: Go, Docker, Node.js, and an OpenAI API key.
 
----
+```
+cp .env.example .env
+# fill in DATABASE_URL, OPENAI_API_KEY, etc.
+make dev
+```
+
+This boots Postgres, applies migrations, starts API + worker, and runs the web app.
+
+## Testing and verification
+```
+make test    # go test ./...
+make smoke   # runs e2e smoke flow (API + worker must be running)
+make verify  # full check: gofmt, tests, fresh DB, e2e
+```
+
+## Configuration
+Environment variables:
+- `DATABASE_URL` (required)
+- `OPENAI_API_KEY` (required for worker)
+- `OPENAI_MODEL` (optional, default `gpt-4o-mini`)
+- `HTTP_ADDR` (default `:8080`)
+- `FRONTEND_ORIGIN` (default `http://localhost:3000`)
+
+## Roadmap
+- PDF compilation pipeline for LaTeX artifacts.
+- More rigorous BM25 explainability and calibration.
+- Richer report schemas + versioned prompts.
+- Deployment hardening (rate limits, observability, storage).
 
 ## Why this project
-Resume Tailor is built to be **useful and explainable**: combining ranking signals (BM25) with LLM-generated guidance, wrapped in a real backend workflow (auth + runs + persistence) so it behaves like a product, not a script.
+Recruiters and applicants both need *explainable* resume feedback. Resume Tailor combines classic IR signals (BM25) with LLM-generated guidance, wrapped in a real backend workflow with authentication, runs, and reproducible outputs.
