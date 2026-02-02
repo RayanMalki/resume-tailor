@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"resume-tailor/internal/artifacts"
@@ -47,6 +48,7 @@ func GetResumeLatexArtifactHandler(runsSvc *runs.Service, artifactsSvc *artifact
 				writeError(w, http.StatusNotFound, "not ready")
 				return
 			}
+			slog.Error("failed to load resume latex artifact", "run_id", runID.String(), "error", err)
 			writeError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
