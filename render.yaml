@@ -11,8 +11,6 @@ services:
         fromDatabase:
           name: resume-tailor-db
           property: connectionString
-      - key: HTTP_ADDR
-        value: ":$PORT"
       - key: FRONTEND_ORIGIN
         value: "https://replace-with-your-web-service-url"
       - key: OPENAI_API_KEY
