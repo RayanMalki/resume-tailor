@@ -7,8 +7,8 @@ ALTER TABLE resumes
   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 UPDATE resumes
-SET title = COALESCE(title, original_name),
-    content_text = COALESCE(content_text, extracted_text);
+SET title = COALESCE(title, original_name, ''),
+    content_text = COALESCE(content_text, extracted_text, '');
 
 ALTER TABLE resumes
   ALTER COLUMN title SET NOT NULL,
