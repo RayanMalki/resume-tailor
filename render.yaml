@@ -3,6 +3,7 @@ services:
     name: resume-tailor-api
     rootDir: backend
     runtime: go
+    plan: free
     buildCommand: go build -o bin/api ./cmd/api
     startCommand: ./bin/api
     envVars:
@@ -22,6 +23,7 @@ services:
     name: resume-tailor-worker
     rootDir: backend
     runtime: go
+    plan: starter
     buildCommand: go build -o bin/worker ./cmd/worker
     startCommand: ./bin/worker
     envVars:
@@ -39,6 +41,7 @@ services:
     name: resume-tailor-web
     rootDir: backend/web
     runtime: node
+    plan: free
     buildCommand: npm ci && npm run build
     startCommand: npm run start
     envVars:
