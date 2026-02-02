@@ -11,6 +11,8 @@ services:
         fromDatabase:
           name: resume-tailor-db
           property: connectionString
+      - key: RUN_MIGRATIONS
+        value: "1"
       - key: FRONTEND_ORIGIN
         value: "https://replace-with-your-web-service-url"
       - key: OPENAI_API_KEY

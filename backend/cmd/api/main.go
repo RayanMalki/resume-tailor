@@ -19,6 +19,7 @@ import (
 	"resume-tailor/internal/resumes"
 	"resume-tailor/internal/runreports"
 	"resume-tailor/internal/runs"
+	"resume-tailor/migrations"
 )
 
 func main() {
@@ -35,6 +36,14 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close(pool)
+
+	if os.Getenv("RUN_MIGRATIONS") == "1" {
+		slog.Info("running migrations")
+		if err := migrations.Run(ctx, pool); err != nil {
+			slog.Error("failed to run migrations", "error", err)
+			os.Exit(1)
+		}
+	}
 
 	authRepo := auth.NewRepo(pool)
 	authSvc := auth.NewService(authRepo)
