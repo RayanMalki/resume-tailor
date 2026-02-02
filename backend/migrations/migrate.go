@@ -28,8 +28,24 @@ func Run(ctx context.Context, pool *pgxpool.Pool) error {
 			continue
 		}
 
-		if _, err := pool.Exec(ctx, sql); err != nil {
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("begin migration %s: %w", name, err)
+		}
+
+		if _, err := tx.Exec(ctx, sql); err != nil {
+			_ = tx.Rollback(ctx)
+			if isUnsafeEnumUse(err) {
+				if err := applyEnumMigrationInAutocommit(ctx, pool, sql); err != nil {
+					return fmt.Errorf("apply migration %s: %w", name, err)
+				}
+				continue
+			}
 			return fmt.Errorf("apply migration %s: %w", name, err)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit migration %s: %w", name, err)
 		}
 	}
 
@@ -55,4 +71,89 @@ func listFiles() ([]string, error) {
 
 	sort.Strings(files)
 	return files, nil
+}
+
+func isUnsafeEnumUse(err error) bool {
+	return strings.Contains(err.Error(), "unsafe use of new value")
+}
+
+func applyEnumMigrationInAutocommit(ctx context.Context, pool *pgxpool.Pool, sql string) error {
+	for _, stmt := range splitSQLStatements(sql) {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
+		}
+		if _, err := pool.Exec(ctx, stmt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func splitSQLStatements(sql string) []string {
+	var stmts []string
+	var buf strings.Builder
+	inSingle := false
+	inDouble := false
+	inDollar := false
+	dollarTag := ""
+
+	for i := 0; i < len(sql); i++ {
+		ch := sql[i]
+
+		if inDollar {
+			if ch == '$' && strings.HasPrefix(sql[i:], dollarTag+"$") {
+				inDollar = false
+				buf.WriteString(dollarTag)
+				buf.WriteByte('$')
+				i += len(dollarTag)
+				continue
+			}
+			buf.WriteByte(ch)
+			continue
+		}
+
+		if !inSingle && !inDouble && ch == '$' {
+			tag := readDollarTag(sql[i:])
+			if tag != "" {
+				inDollar = true
+				dollarTag = tag
+				buf.WriteString(tag)
+				buf.WriteByte('$')
+				i += len(tag)
+				continue
+			}
+		}
+
+		if ch == '\'' && !inDouble {
+			inSingle = !inSingle
+		} else if ch == '"' && !inSingle {
+			inDouble = !inDouble
+		}
+
+		if ch == ';' && !inSingle && !inDouble && !inDollar {
+			stmts = append(stmts, buf.String())
+			buf.Reset()
+			continue
+		}
+
+		buf.WriteByte(ch)
+	}
+
+	if strings.TrimSpace(buf.String()) != "" {
+		stmts = append(stmts, buf.String())
+	}
+
+	return stmts
+}
+
+func readDollarTag(sql string) string {
+	if len(sql) < 2 || sql[0] != '$' {
+		return ""
+	}
+	end := strings.IndexByte(sql[1:], '$')
+	if end == -1 {
+		return ""
+	}
+	return sql[:end+1]
 }
