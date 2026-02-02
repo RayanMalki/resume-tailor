@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -47,7 +48,15 @@ func main() {
 	artifactsRepo := artifacts.NewRepo(pool)
 	artifactsSvc := artifacts.NewService(artifactsRepo)
 
-	router := httpapi.NewRouter(authSvc, runsSvc, resumesSvc, runreportsSvc, artifactsSvc, []string{cfg.FrontendOrigin})
+	allowedOrigins := []string{}
+	for _, origin := range strings.Split(cfg.FrontendOrigin, ",") {
+		origin = strings.TrimSpace(origin)
+		if origin != "" {
+			allowedOrigins = append(allowedOrigins, origin)
+		}
+	}
+
+	router := httpapi.NewRouter(authSvc, runsSvc, resumesSvc, runreportsSvc, artifactsSvc, allowedOrigins)
 
 	srv := &http.Server{
 		Addr:    cfg.HTTPAddr,
