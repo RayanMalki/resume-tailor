@@ -14,7 +14,7 @@ services:
       - key: RUN_MIGRATIONS
         value: "1"
       - key: FRONTEND_ORIGIN
-        value: "https://replace-with-your-web-service-url"
+        value: "https://resume-tailor-web.onrender.com"
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL
