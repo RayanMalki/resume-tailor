@@ -1,12 +1,12 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import TopBar from "../components/TopBar";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 
-export default function JobPage() {
+function JobPageInner() {
   const params = useSearchParams();
   const router = useRouter();
   const resumeId = params.get("resumeId");
@@ -82,5 +82,13 @@ export default function JobPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function JobPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
+      <JobPageInner />
+    </Suspense>
   );
 }
