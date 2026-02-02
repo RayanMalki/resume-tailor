@@ -13,3 +13,6 @@ backend/worker
 backend/api
 backend/api
 .DS_Store
+backend/.env.example
+.DS_Store
+.DS_Store
