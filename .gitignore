@@ -1,18 +1,15 @@
-.idea/go.imports.xml
-.idea/modules.xml
-.idea/resume-tailor.iml
-.idea/vcs.xml
-backend/api
-backend/cookies.txt
-backend/api
-cookies.txt
-backend/api
-backend/api
+# macOS
+.DS_Store
+
+# IDEs
+.idea/
+
+# Binaries
 backend/api
 backend/worker
-backend/api
-backend/api
-.DS_Store
-backend/.env.example
-.DS_Store
-.DS_Store
+
+# Local files
+backend/.env
+backend/web/.env.local
+backend/cookies.txt
+cookies.txt
