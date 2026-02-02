@@ -1,0 +1,46 @@
+services:
+  - type: web
+    name: resume-tailor-api
+    rootDir: backend
+    buildCommand: go build -o bin/api ./cmd/api
+    startCommand: ./bin/api
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: resume-tailor-db
+          property: connectionString
+      - key: HTTP_ADDR
+        value: ":$PORT"
+      - key: FRONTEND_ORIGIN
+        value: "https://replace-with-your-web-service-url"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: "gpt-4o-mini"
+  - type: worker
+    name: resume-tailor-worker
+    rootDir: backend
+    buildCommand: go build -o bin/worker ./cmd/worker
+    startCommand: ./bin/worker
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: resume-tailor-db
+          property: connectionString
+      - key: WORKER_ID
+        value: "worker-1"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: "gpt-4o-mini"
+  - type: web
+    name: resume-tailor-web
+    rootDir: backend/web
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: "production"
+databases:
+  - name: resume-tailor-db
+    plan: free
