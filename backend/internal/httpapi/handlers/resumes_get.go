@@ -39,4 +39,3 @@ func GetResumeByIDHandler(resumesSvc *resumes.Service) http.HandlerFunc {
 		writeJSON(w, http.StatusOK, resume)
 	}
 }
-

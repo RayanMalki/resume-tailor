@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"resume-tailor/internal/artifacts"
 	"resume-tailor/internal/auth"
 	"resume-tailor/internal/config"
 	"resume-tailor/internal/db"
@@ -43,8 +44,10 @@ func main() {
 	resumesSvc := resumes.NewService(resumesRepo)
 	runreportsRepo := runreports.NewRepo(pool)
 	runreportsSvc := runreports.NewService(runreportsRepo)
+	artifactsRepo := artifacts.NewRepo(pool)
+	artifactsSvc := artifacts.NewService(artifactsRepo)
 
-	router := httpapi.NewRouter(authSvc, runsSvc, resumesSvc, runreportsSvc)
+	router := httpapi.NewRouter(authSvc, runsSvc, resumesSvc, runreportsSvc, artifactsSvc, []string{cfg.FrontendOrigin})
 
 	srv := &http.Server{
 		Addr:    cfg.HTTPAddr,

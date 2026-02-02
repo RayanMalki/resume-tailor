@@ -128,4 +128,3 @@ WHERE id = $3`
 	_, err := r.db.Exec(ctx, q, status, errorMsg, jobID)
 	return err
 }
-

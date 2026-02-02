@@ -8,22 +8,24 @@ import (
 )
 
 type Config struct {
-	DatabaseURL  string
-	HTTPAddr     string
-	WorkerID     string
-	OpenAIAPIKey string
-	OpenAIModel  string
+	DatabaseURL    string
+	HTTPAddr       string
+	WorkerID       string
+	OpenAIAPIKey   string
+	OpenAIModel    string
+	FrontendOrigin string
 }
 
 func Load() (Config, error) {
 	_ = godotenv.Load()
 
 	cfg := Config{
-		DatabaseURL:  os.Getenv("DATABASE_URL"),
-		HTTPAddr:     os.Getenv("HTTP_ADDR"),
-		WorkerID:     os.Getenv("WORKER_ID"),
-		OpenAIAPIKey: os.Getenv("OPENAI_API_KEY"),
-		OpenAIModel:  os.Getenv("OPENAI_MODEL"),
+		DatabaseURL:    os.Getenv("DATABASE_URL"),
+		HTTPAddr:       os.Getenv("HTTP_ADDR"),
+		WorkerID:       os.Getenv("WORKER_ID"),
+		OpenAIAPIKey:   os.Getenv("OPENAI_API_KEY"),
+		OpenAIModel:    os.Getenv("OPENAI_MODEL"),
+		FrontendOrigin: os.Getenv("FRONTEND_ORIGIN"),
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -40,6 +42,10 @@ func Load() (Config, error) {
 
 	if cfg.OpenAIModel == "" {
 		cfg.OpenAIModel = "gpt-4o-mini"
+	}
+
+	if cfg.FrontendOrigin == "" {
+		cfg.FrontendOrigin = "http://localhost:3000"
 	}
 
 	return cfg, nil

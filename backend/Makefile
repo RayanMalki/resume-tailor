@@ -1,4 +1,4 @@
-.PHONY: test smoke verify
+.PHONY: test smoke verify dev
 
 test:
 	go test ./...
@@ -8,3 +8,6 @@ smoke:
 
 verify:
 	./scripts/verify.sh
+
+dev:
+	./scripts/dev.sh

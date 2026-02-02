@@ -81,29 +81,51 @@ create_run() {
   echo "$payload" | jq -r '.runId'
 }
 
+login() {
+  curl -fsS -c "$COOKIE_JAR" \
+    -X POST "$API_BASE_URL/v1/auth/login" \
+    -H "Content-Type: application/json" \
+    -d "{\"email\":\"$email\",\"password\":\"$password\"}" >/dev/null
+}
+
 poll_run() {
   local run_id="$1"
-  local timeout_s=120
+  local timeout_s=240
   local interval_s=1
   local elapsed=0
 
   while [[ $elapsed -lt $timeout_s ]]; do
-    local payload
-    payload=$(curl -fsS -b "$COOKIE_JAR" "$API_BASE_URL/v1/runs/$run_id")
-    local status
-    status=$(echo "$payload" | jq -r '.status')
+    local payload status_code status
+    payload=$(mktemp)
+    status_code=$(curl -s -o "$payload" -w "%{http_code}" -b "$COOKIE_JAR" "$API_BASE_URL/v1/runs/$run_id")
+
+    if [[ "$status_code" == "401" ]]; then
+      login
+      status_code=$(curl -s -o "$payload" -w "%{http_code}" -b "$COOKIE_JAR" "$API_BASE_URL/v1/runs/$run_id")
+    fi
+
+    if [[ "$status_code" != "200" ]]; then
+      echo "ERROR: failed to fetch run status (status=$status_code)" >&2
+      cat "$payload" >&2 || true
+      rm -f "$payload"
+      return 1
+    fi
+
+    status=$(jq -r '.status' "$payload")
 
     if [[ "$status" == "succeeded" ]]; then
-      echo "$payload" >/dev/null
+      rm -f "$payload"
       return 0
     fi
 
     if [[ "$status" == "failed" ]]; then
       echo "ERROR: run failed" >&2
-      echo "$payload" >&2
+      cat "$payload" >&2 || true
+      rm -f "$payload"
       return 1
     fi
 
+    rm -f "$payload"
     sleep "$interval_s"
     elapsed=$((elapsed + interval_s))
   done
@@ -114,14 +136,25 @@ poll_run() {
 
 fetch_report() {
   local run_id="$1"
-  local payload
-  payload=$(curl -fsS -b "$COOKIE_JAR" "$API_BASE_URL/v1/runs/$run_id/report")
+  local payload status_code
+  payload=$(mktemp)
+  status_code=$(curl -s -o "$payload" -w "%{http_code}" -b "$COOKIE_JAR" "$API_BASE_URL/v1/runs/$run_id/report")
+  if [[ "$status_code" == "401" ]]; then
+    login
+    status_code=$(curl -s -o "$payload" -w "%{http_code}" -b "$COOKIE_JAR" "$API_BASE_URL/v1/runs/$run_id/report")
+  fi
+  if [[ "$status_code" != "200" ]]; then
+    echo "ERROR: failed to fetch report (status=$status_code)" >&2
+    cat "$payload" >&2 || true
+    rm -f "$payload"
+    exit 1
+  fi
 
-  echo "$payload" | jq -e '.report_version == 1' >/dev/null
-  echo "$payload" | jq -e '.bm25_signals' >/dev/null
-  echo "$payload" | jq -e '.generated_at' >/dev/null
+  jq -e '.report_version == 1' "$payload" >/dev/null
+  jq -e '.bm25_signals' "$payload" >/dev/null
+  jq -e '.generated_at' "$payload" >/dev/null
 
-  echo "$payload"
+  cat "$payload"
 }
 
 main() {

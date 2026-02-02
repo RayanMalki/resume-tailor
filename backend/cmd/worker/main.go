@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"resume-tailor/internal/ai"
+	"resume-tailor/internal/artifacts"
 	"resume-tailor/internal/config"
 	"resume-tailor/internal/db"
 	"resume-tailor/internal/jobs"
@@ -39,6 +40,8 @@ func main() {
 	runreportsSvc := runreports.NewService(runreportsRepo)
 	runsRepoRaw := runs.NewRepo(pool)
 	resumesRepo := resumes.NewRepo(pool)
+	artifactsRepo := artifacts.NewRepo(pool)
+	artifactsSvc := artifacts.NewService(artifactsRepo)
 
 	// Create adapter to avoid import cycle
 	runsRepo := &runsRepoAdapter{repo: runsRepoRaw}
@@ -57,7 +60,7 @@ func main() {
 		slog.Warn("OPENAI_API_KEY not set, worker will fail jobs that require AI")
 	}
 
-	worker := jobs.NewWorker(jobsRepo, pool, cfg.WorkerID, runreportsSvc, runsRepo, resumesRepo, aiClient)
+	worker := jobs.NewWorker(jobsRepo, pool, cfg.WorkerID, runreportsSvc, runsRepo, resumesRepo, aiClient, artifactsSvc)
 
 	// Handle graceful shutdown
 	ctx, cancel := context.WithCancel(ctx)

@@ -65,4 +65,3 @@ func (s *Service) ListResumesByUser(ctx context.Context, userID uuid.UUID, limit
 
 	return s.repo.ListResumesByUser(ctx, userID, limit, offset)
 }
-

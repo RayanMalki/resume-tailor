@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 
+	"resume-tailor/internal/artifacts"
 	"resume-tailor/internal/auth"
 	"resume-tailor/internal/httpapi/handlers"
 	"resume-tailor/internal/httpapi/middleware"
@@ -13,12 +14,13 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes.Service, reportsSvc *runreports.Service) http.Handler {
+func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes.Service, reportsSvc *runreports.Service, artifactsSvc *artifacts.Service, allowedOrigins []string) http.Handler {
 	r := chi.NewRouter()
 
 	// Global middleware
 	r.Use(middleware.Recover)
 	r.Use(middleware.Logging)
+	r.Use(middleware.CORS(allowedOrigins))
 
 	// v1 API routes
 	r.Route("/v1", func(r chi.Router) {
@@ -38,6 +40,7 @@ func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes
 			r.Get("/me", handlers.Me())
 			r.Get("/runs/{runID}", handlers.GetRunByIdHandler(runsSvc))
 			r.Get("/runs/{runID}/report", handlers.GetRunReportHandler(runsSvc, reportsSvc))
+			r.Get("/runs/{runID}/artifacts/resume-latex", handlers.GetResumeLatexArtifactHandler(runsSvc, artifactsSvc))
 			r.Get("/runs", handlers.ListRunsHandler(runsSvc))
 			r.Get("/resumes", handlers.ListResumesHandler(resumesSvc))
 			r.Get("/resumes/{resumeID}", handlers.GetResumeByIDHandler(resumesSvc))
