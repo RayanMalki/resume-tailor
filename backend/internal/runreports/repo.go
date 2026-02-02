@@ -27,8 +27,7 @@ func (r *Repo) UpsertRunReport(ctx context.Context, runID uuid.UUID, atsReport, 
 	const q = `
 INSERT INTO run_reports (run_id, ats_report, change_plan)
 VALUES ($1, $2, $3)
-ON CONFLICT (run_id) DO UPDATE
-SET ats_report = $2, change_plan = $3, created_at = now()`
+ON CONFLICT (run_id) DO NOTHING`
 
 	_, err := r.db.Exec(ctx, q, runID, atsReport, changePlan)
 	if err != nil {
@@ -64,4 +63,3 @@ WHERE run_id = $1`
 
 	return report, nil
 }
-

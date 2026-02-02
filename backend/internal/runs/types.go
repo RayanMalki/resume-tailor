@@ -10,11 +10,10 @@ import (
 type Status string
 
 const (
-	StatusCreated    Status = "created"
-	StatusQueued     Status = "queued"
-	StatusProcessing Status = "processing"
-	StatusFailed     Status = "failed"
-	StatusCompleted  Status = "completed"
+	StatusQueued    Status = "queued"
+	StatusRunning   Status = "running"
+	StatusSucceeded Status = "succeeded"
+	StatusFailed    Status = "failed"
 )
 
 type Run struct {

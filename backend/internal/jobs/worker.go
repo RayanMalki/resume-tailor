@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"resume-tailor/internal/ai"
@@ -19,11 +20,10 @@ import (
 const pollInterval = 1 * time.Second
 
 const (
-	runStatusCreated    = "created"
-	runStatusQueued     = "queued"
-	runStatusProcessing = "processing"
-	runStatusFailed     = "failed"
-	runStatusCompleted  = "completed"
+	runStatusQueued    = "queued"
+	runStatusRunning   = "running"
+	runStatusFailed    = "failed"
+	runStatusSucceeded = "succeeded"
 )
 
 // RunsRepo is an interface to avoid import cycle with runs package
@@ -94,9 +94,9 @@ func (w *Worker) processNextJob(ctx context.Context) error {
 
 	slog.Info("claimed job", "job_id", job.ID, "run_id", job.RunID, "worker_id", w.workerID)
 
-	// Update run status to processing
-	if err := w.updateRunStatus(ctx, job.RunID, runStatusProcessing, nil); err != nil {
-		slog.Error("failed to update run status to processing", "error", err, "run_id", job.RunID)
+	// Update run status to running
+	if err := w.updateRunStatus(ctx, job.RunID, runStatusRunning, nil); err != nil {
+		slog.Error("failed to update run status to running", "error", err, "run_id", job.RunID)
 		// Mark job as failed
 		w.jobsRepo.MarkJobFailed(ctx, job.ID, fmt.Sprintf("failed to update run status: %v", err), job.Attempts < job.MaxAttempts)
 		return err
@@ -105,7 +105,7 @@ func (w *Worker) processNextJob(ctx context.Context) error {
 	// Process the run (MVP stub)
 	if err := w.processRun(ctx, job.RunID); err != nil {
 		slog.Error("failed to process run", "error", err, "run_id", job.RunID)
-		errorMsg := err.Error()
+		errorMsg := safeErrorMessage(err)
 
 		// Update run status to failed
 		if err := w.updateRunStatus(ctx, job.RunID, runStatusFailed, &errorMsg); err != nil {
@@ -120,9 +120,9 @@ func (w *Worker) processNextJob(ctx context.Context) error {
 		return err
 	}
 
-	// Success: update run status to completed
-	if err := w.updateRunStatus(ctx, job.RunID, runStatusCompleted, nil); err != nil {
-		slog.Error("failed to update run status to completed", "error", err, "run_id", job.RunID)
+	// Success: update run status to succeeded
+	if err := w.updateRunStatus(ctx, job.RunID, runStatusSucceeded, nil); err != nil {
+		slog.Error("failed to update run status to succeeded", "error", err, "run_id", job.RunID)
 		w.jobsRepo.MarkJobFailed(ctx, job.ID, fmt.Sprintf("failed to update run status: %v", err), false)
 		return err
 	}
@@ -143,6 +143,16 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		return fmt.Errorf("OPENAI_API_KEY missing")
 	}
 
+	// Idempotency: if report already exists, skip regeneration.
+	if w.reportsSvc != nil {
+		if _, err := w.reportsSvc.GetRunReportByRunID(ctx, runID); err == nil {
+			slog.Info("run report already exists, skipping regeneration", "run_id", runID)
+			return nil
+		} else if err != nil && err != runreports.ErrRunReportNotFound {
+			return fmt.Errorf("failed to check existing run report: %w", err)
+		}
+	}
+
 	// 1. Load the run
 	runData, err := w.runsRepo.GetRunByID(ctx, runID)
 	if err != nil {
@@ -159,10 +169,12 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 	jobText := runData.JobText
 
 	// 3. Compute BM25 signals (stub for now)
-	bm25Signals, err := bm25.Compute(resumeText, jobText)
+	var bm25Signals *bm25.Signals
+	signals, err := bm25.Compute(resumeText, jobText)
 	if err != nil {
 		slog.Warn("BM25 computation failed, continuing without signals", "error", err, "run_id", runID)
-		bm25Signals = nil
+	} else {
+		bm25Signals = &signals
 	}
 
 	// 4. Generate ATS report and change plan via OpenAI
@@ -171,8 +183,21 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		return fmt.Errorf("failed to generate run report: %w", err)
 	}
 
+	reportSignals := bm25.Signals{}
+	if bm25Signals != nil {
+		reportSignals = *bm25Signals
+	}
+
+	reportPayload := reportPayload{
+		ReportVersion: 1,
+		GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
+		BM25Signals:   reportSignals,
+		ATSReport:     atsReport,
+		ChangePlan:    changePlan,
+	}
+
 	// 5. Marshal to JSON
-	atsReportJSON, err := json.Marshal(atsReport)
+	atsReportJSON, err := json.Marshal(reportPayload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal ATS report: %w", err)
 	}
@@ -229,4 +254,31 @@ WHERE id = $1`
 
 	_, err := w.db.Exec(ctx, q, runID, status, errorMessage)
 	return err
+}
+
+type reportPayload struct {
+	ReportVersion int           `json:"report_version"`
+	GeneratedAt   string        `json:"generated_at"`
+	BM25Signals   bm25.Signals  `json:"bm25_signals"`
+	ATSReport     ai.ATSReport  `json:"ats_report"`
+	ChangePlan    ai.ChangePlan `json:"change_plan"`
+}
+
+func safeErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "OPENAI_API_KEY"):
+		return "ai_client_unavailable"
+	case strings.Contains(msg, "generate run report"):
+		return "report_generation_failed"
+	case strings.Contains(msg, "load resume"):
+		return "resume_load_failed"
+	case strings.Contains(msg, "load run"):
+		return "run_load_failed"
+	default:
+		return "processing_failed"
+	}
 }

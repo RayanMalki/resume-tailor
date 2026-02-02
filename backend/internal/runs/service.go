@@ -12,8 +12,8 @@ import (
 )
 
 type Service struct {
-	repo      *Repo
-	jobsEnq   jobs.JobsEnqueuer
+	repo    *Repo
+	jobsEnq jobs.JobsEnqueuer
 }
 
 func NewService(repo *Repo, jobsEnq jobs.JobsEnqueuer) *Service {
@@ -50,6 +50,8 @@ func (s *Service) CreateRun(ctx context.Context, userID,
 	if s.jobsEnq != nil {
 		_, err = s.jobsEnq.EnqueueProcessRun(ctx, run.ID)
 		if err != nil {
+			enqueueMsg := "enqueue_failed"
+			_ = s.repo.UpdateRunStatus(ctx, run.ID, string(StatusFailed), &enqueueMsg)
 			return Run{}, fmt.Errorf("failed to enqueue job: %w", err)
 		}
 	}
