@@ -19,6 +19,10 @@ services:
         sync: false
       - key: OPENAI_MODEL
         value: "gpt-4o-mini"
+      - key: COOKIE_SECURE
+        value: "1"
+      - key: COOKIE_SAMESITE
+        value: "none"
   - type: worker
     name: resume-tailor-worker
     rootDir: backend
