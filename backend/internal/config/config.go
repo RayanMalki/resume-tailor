@@ -14,6 +14,8 @@ type Config struct {
 	OpenAIAPIKey   string
 	OpenAIModel    string
 	FrontendOrigin string
+	PDFEnabled     bool
+	TectonicBin    string
 }
 
 func Load() (Config, error) {
@@ -26,6 +28,8 @@ func Load() (Config, error) {
 		OpenAIAPIKey:   os.Getenv("OPENAI_API_KEY"),
 		OpenAIModel:    os.Getenv("OPENAI_MODEL"),
 		FrontendOrigin: os.Getenv("FRONTEND_ORIGIN"),
+		PDFEnabled:     os.Getenv("RESUME_PDF_ENABLED") == "1",
+		TectonicBin:    os.Getenv("TECTONIC_BIN"),
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -50,6 +54,10 @@ func Load() (Config, error) {
 
 	if cfg.FrontendOrigin == "" {
 		cfg.FrontendOrigin = "http://localhost:3000"
+	}
+
+	if cfg.TectonicBin == "" {
+		cfg.TectonicBin = "tectonic"
 	}
 
 	return cfg, nil

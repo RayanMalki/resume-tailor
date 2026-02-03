@@ -14,6 +14,8 @@ export default function ResultPage() {
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(10);
   const [resumeId, setResumeId] = useState<string | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const loadingMessage = useMemo(() => {
     if (latex) return "Ready";
@@ -110,6 +112,38 @@ export default function ResultPage() {
     await navigator.clipboard.writeText(latex);
   };
 
+  const handleDownloadPDF = async () => {
+    setPdfError(null);
+    setPdfLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/v1/runs/${runId}/artifacts/resume-pdf`, {
+        credentials: "include"
+      });
+
+      if (!res.ok) {
+        if (res.status === 404) {
+          throw new Error("PDF not ready yet. Try again in a moment.");
+        }
+        throw new Error("Failed to fetch PDF");
+      }
+
+      const buffer = await res.arrayBuffer();
+      const blob = new Blob([buffer], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "resume.pdf";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setPdfError(err instanceof Error ? err.message : "Failed to download PDF");
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   const handleGoToResume = () => {
     router.push("/resume");
   };
@@ -160,13 +194,22 @@ export default function ResultPage() {
             <div className="mt-6">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-slate-200">LaTeX output</span>
-                <button
-                  onClick={handleCopy}
-                  className="rounded-full border border-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-ember-200 transition hover:border-ember-400 hover:text-white"
-                >
-                  Copy
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleDownloadPDF}
+                    className="rounded-full border border-ember-500/60 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-ember-200 transition hover:border-ember-400 hover:text-white"
+                  >
+                    {pdfLoading ? "Preparing..." : "Download PDF"}
+                  </button>
+                  <button
+                    onClick={handleCopy}
+                    className="rounded-full border border-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-slate-200 transition hover:border-ember-400 hover:text-ember-200"
+                  >
+                    Copy LaTeX
+                  </button>
+                </div>
               </div>
+              {pdfError ? <p className="mt-3 text-xs text-rose-300">{pdfError}</p> : null}
               <pre className="mt-3 max-h-[420px] overflow-auto rounded-2xl border border-white/10 bg-ink-950 p-4 text-xs text-slate-100">
 {latex}
               </pre>

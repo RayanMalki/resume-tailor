@@ -28,7 +28,7 @@ services:
     rootDir: backend
     runtime: go
     plan: starter
-    buildCommand: go build -o bin/worker ./cmd/worker
+    buildCommand: ./scripts/install_tectonic.sh && go build -o bin/worker ./cmd/worker
     startCommand: ./bin/worker
     envVars:
       - key: DATABASE_URL
@@ -41,6 +41,10 @@ services:
         sync: false
       - key: OPENAI_MODEL
         value: "gpt-4o-mini"
+      - key: RESUME_PDF_ENABLED
+        value: "1"
+      - key: TECTONIC_BIN
+        value: "./bin/tectonic"
   - type: web
     name: resume-tailor-web
     rootDir: backend/web

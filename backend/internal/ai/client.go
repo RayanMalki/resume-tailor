@@ -22,6 +22,40 @@ type ChangePlan struct {
 	Changes []string `json:"changes"`
 }
 
+type ResumeSpec struct {
+	Name       string             `json:"name"`
+	Title      string             `json:"title"`
+	Contact    []string           `json:"contact"`
+	Summary    []string           `json:"summary"`
+	Experience []ResumeExperience `json:"experience"`
+	Projects   []ResumeProject    `json:"projects"`
+	Education  []ResumeEducation  `json:"education"`
+	Skills     []string           `json:"skills"`
+}
+
+type ResumeExperience struct {
+	Company  string   `json:"company"`
+	Role     string   `json:"role"`
+	Location string   `json:"location"`
+	Dates    string   `json:"dates"`
+	Bullets  []string `json:"bullets"`
+}
+
+type ResumeProject struct {
+	Name    string   `json:"name"`
+	Stack   string   `json:"stack"`
+	Dates   string   `json:"dates"`
+	Bullets []string `json:"bullets"`
+}
+
+type ResumeEducation struct {
+	School   string   `json:"school"`
+	Degree   string   `json:"degree"`
+	Location string   `json:"location"`
+	Dates    string   `json:"dates"`
+	Details  []string `json:"details"`
+}
+
 // ReportResponse is the expected JSON structure from OpenAI
 type ReportResponse struct {
 	ATSReport  ATSReport  `json:"ats_report"`
@@ -197,5 +231,114 @@ func buildResumeLatexPrompt(resumeText, jobText string, bm25Signals any) string 
 	}
 
 	b.WriteString("Return LaTeX only.")
+	return b.String()
+}
+
+// GenerateResumeSpec generates a strict JSON resume spec for a fixed template.
+func (c *Client) GenerateResumeSpec(ctx context.Context, resumeText, jobText string, bm25Signals any) (ResumeSpec, error) {
+	prompt := buildResumeSpecPrompt(resumeText, jobText, bm25Signals)
+
+	req := openai.ChatCompletionNewParams{
+		Model: c.model,
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage("You are a resume editor. Return ONLY JSON in the requested format."),
+			openai.UserMessage(prompt),
+		},
+		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
+			OfJSONObject: func() *shared.ResponseFormatJSONObjectParam {
+				p := shared.NewResponseFormatJSONObjectParam()
+				return &p
+			}(),
+		},
+	}
+
+	resp, err := c.client.Chat.Completions.New(ctx, req)
+	if err != nil {
+		return ResumeSpec{}, fmt.Errorf("OpenAI API error: %w", err)
+	}
+
+	if len(resp.Choices) == 0 {
+		return ResumeSpec{}, fmt.Errorf("no choices in OpenAI response")
+	}
+
+	content := strings.TrimSpace(resp.Choices[0].Message.Content)
+	if content == "" {
+		return ResumeSpec{}, fmt.Errorf("empty content in OpenAI response")
+	}
+
+	var spec ResumeSpec
+	if err := json.Unmarshal([]byte(content), &spec); err != nil {
+		return ResumeSpec{}, fmt.Errorf("failed to parse resume JSON: %w", err)
+	}
+
+	return spec, nil
+}
+
+func buildResumeSpecPrompt(resumeText, jobText string, bm25Signals any) string {
+	var b strings.Builder
+	b.WriteString("Return ONLY JSON. No LaTeX. No commentary. Use ASCII text only.\n")
+	b.WriteString("Create a one-page resume spec tailored to the job.\n")
+	b.WriteString("Constraints:\n")
+	b.WriteString("- Summary: 2-3 bullets\n")
+	b.WriteString("- Experience: up to 4 roles, 2-4 bullets each\n")
+	b.WriteString("- Projects: up to 3 projects, 2-3 bullets each\n")
+	b.WriteString("- Education: up to 2 entries\n")
+	b.WriteString("- Skills: 8-16 items\n")
+	b.WriteString("Keep bullets short (<= 18 words). Use action verbs.\n")
+	b.WriteString("Use the resume content as the source. Do not invent companies or degrees.\n\n")
+
+	b.WriteString("RESUME:\n")
+	b.WriteString(resumeText)
+	b.WriteString("\n\n")
+
+	b.WriteString("JOB DESCRIPTION:\n")
+	b.WriteString(jobText)
+	b.WriteString("\n\n")
+
+	if bm25Signals != nil {
+		b.WriteString("BM25 SIGNALS:\n")
+		serialized, err := json.MarshalIndent(bm25Signals, "", "  ")
+		if err != nil {
+			b.WriteString("(BM25 analysis available, failed to serialize)\n\n")
+		} else {
+			b.WriteString(string(serialized))
+			b.WriteString("\n\n")
+		}
+	}
+
+	b.WriteString("Return JSON in this exact format:\n")
+	b.WriteString(`{
+  "name": "",
+  "title": "",
+  "contact": ["email", "phone", "linkedin", "github", "website"],
+  "summary": ["", ""],
+  "experience": [
+    {
+      "company": "",
+      "role": "",
+      "location": "",
+      "dates": "",
+      "bullets": ["", ""]
+    }
+  ],
+  "projects": [
+    {
+      "name": "",
+      "stack": "",
+      "dates": "",
+      "bullets": ["", ""]
+    }
+  ],
+  "education": [
+    {
+      "school": "",
+      "degree": "",
+      "location": "",
+      "dates": "",
+      "details": [""]
+    }
+  ],
+  "skills": ["", ""]
+}`)
 	return b.String()
 }

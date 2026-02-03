@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -10,6 +11,7 @@ import (
 
 	"resume-tailor/internal/ai"
 	"resume-tailor/internal/artifacts"
+	"resume-tailor/internal/latex"
 	"resume-tailor/internal/resumes"
 	"resume-tailor/internal/runreports"
 	"resume-tailor/internal/scoring/bm25"
@@ -50,9 +52,11 @@ type Worker struct {
 	resumesRepo *resumes.Repo
 	aiClient    *ai.Client
 	artifacts   *artifacts.Service
+	pdfEnabled  bool
+	tectonicBin string
 }
 
-func NewWorker(jobsRepo *Repo, db *pgxpool.Pool, workerID string, reportsSvc *runreports.Service, runsRepo RunsRepo, resumesRepo *resumes.Repo, aiClient *ai.Client, artifactsSvc *artifacts.Service) *Worker {
+func NewWorker(jobsRepo *Repo, db *pgxpool.Pool, workerID string, reportsSvc *runreports.Service, runsRepo RunsRepo, resumesRepo *resumes.Repo, aiClient *ai.Client, artifactsSvc *artifacts.Service, pdfEnabled bool, tectonicBin string) *Worker {
 	return &Worker{
 		jobsRepo:    jobsRepo,
 		db:          db,
@@ -62,6 +66,8 @@ func NewWorker(jobsRepo *Repo, db *pgxpool.Pool, workerID string, reportsSvc *ru
 		resumesRepo: resumesRepo,
 		aiClient:    aiClient,
 		artifacts:   artifactsSvc,
+		pdfEnabled:  pdfEnabled,
+		tectonicBin: tectonicBin,
 	}
 }
 
@@ -164,8 +170,17 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		}
 	}
 
-	if reportExists && latexExists {
-		slog.Info("run report and latex artifact already exist, skipping", "run_id", runID)
+	pdfExists := false
+	if w.pdfEnabled && w.artifacts != nil {
+		if _, err := w.artifacts.GetByRunIDAndType(ctx, runID, artifacts.TypeResumePDF); err == nil {
+			pdfExists = true
+		} else if err != nil && err != artifacts.ErrArtifactNotFound {
+			return fmt.Errorf("failed to check existing pdf artifact: %w", err)
+		}
+	}
+
+	if reportExists && latexExists && (pdfExists || !w.pdfEnabled) {
+		slog.Info("run report and artifacts already exist, skipping", "run_id", runID)
 		return nil
 	}
 
@@ -236,13 +251,38 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		}
 	}
 
-	if !latexExists && w.artifacts != nil {
-		latex, err := w.aiClient.GenerateResumeLatex(ctx, resumeText, jobText, bm25Signals)
-		if err != nil {
-			return fmt.Errorf("failed to generate resume latex: %w", err)
+	if w.artifacts != nil && (!latexExists || (w.pdfEnabled && !pdfExists)) {
+		if w.aiClient == nil {
+			return fmt.Errorf("ai client is not configured")
 		}
-		if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeResumeLatex, latex); err != nil {
-			return fmt.Errorf("failed to store resume latex: %w", err)
+
+		var latexDoc string
+		if latexExists {
+			existing, err := w.artifacts.GetByRunIDAndType(ctx, runID, artifacts.TypeResumeLatex)
+			if err != nil {
+				return fmt.Errorf("failed to load resume latex: %w", err)
+			}
+			latexDoc = existing.Content
+		} else {
+			spec, err := w.aiClient.GenerateResumeSpec(ctx, resumeText, jobText, bm25Signals)
+			if err != nil {
+				return fmt.Errorf("failed to generate resume spec: %w", err)
+			}
+			latexDoc = latex.RenderResume(spec)
+			if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeResumeLatex, latexDoc); err != nil {
+				return fmt.Errorf("failed to store resume latex: %w", err)
+			}
+		}
+
+		if w.pdfEnabled && !pdfExists {
+			pdfBytes, err := latex.CompilePDF(ctx, w.tectonicBin, latexDoc)
+			if err != nil {
+				return fmt.Errorf("failed to compile resume pdf: %w", err)
+			}
+			encoded := base64.StdEncoding.EncodeToString(pdfBytes)
+			if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeResumePDF, encoded); err != nil {
+				return fmt.Errorf("failed to store resume pdf: %w", err)
+			}
 		}
 	}
 
@@ -308,6 +348,10 @@ func safeErrorMessage(err error) string {
 		return "report_generation_failed"
 	case strings.Contains(msg, "generate resume latex"):
 		return "latex_generation_failed"
+	case strings.Contains(msg, "generate resume spec"):
+		return "resume_spec_generation_failed"
+	case strings.Contains(msg, "compile resume pdf"):
+		return "pdf_generation_failed"
 	case strings.Contains(msg, "load resume"):
 		return "resume_load_failed"
 	case strings.Contains(msg, "load run"):

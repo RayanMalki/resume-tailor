@@ -60,7 +60,7 @@ func main() {
 		slog.Warn("OPENAI_API_KEY not set, worker will fail jobs that require AI")
 	}
 
-	worker := jobs.NewWorker(jobsRepo, pool, cfg.WorkerID, runreportsSvc, runsRepo, resumesRepo, aiClient, artifactsSvc)
+	worker := jobs.NewWorker(jobsRepo, pool, cfg.WorkerID, runreportsSvc, runsRepo, resumesRepo, aiClient, artifactsSvc, cfg.PDFEnabled, cfg.TectonicBin)
 
 	// Handle graceful shutdown
 	ctx, cancel := context.WithCancel(ctx)
