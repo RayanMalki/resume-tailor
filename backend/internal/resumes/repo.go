@@ -89,7 +89,7 @@ OFFSET $3`
 	}
 	defer rows.Close()
 
-	var resumes []Resume
+	resumes := make([]Resume, 0, limit)
 	for rows.Next() {
 		var res Resume
 		err := rows.Scan(
