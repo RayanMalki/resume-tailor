@@ -1,10 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="0.13.1"
-TARGET="x86_64-unknown-linux-gnu"
-ARCHIVE="tectonic-${VERSION}-${TARGET}.tar.gz"
-URL="https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40${VERSION}/${ARCHIVE}"
+VERSION="${TECTONIC_VERSION:-0.15.0}"
+MUSL_TARGET="x86_64-unknown-linux-musl"
+GNU_TARGET="x86_64-unknown-linux-gnu"
+
+BASE_URL="https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40${VERSION}"
+MUSL_ARCHIVE="tectonic-${VERSION}-${MUSL_TARGET}.tar.gz"
+GNU_ARCHIVE="tectonic-${VERSION}-${GNU_TARGET}.tar.gz"
+
+URL="${BASE_URL}/${MUSL_ARCHIVE}"
+ARCHIVE="${MUSL_ARCHIVE}"
+
+if ! curl -fsI "$URL" >/dev/null 2>&1; then
+  URL="${BASE_URL}/${GNU_ARCHIVE}"
+  ARCHIVE="${GNU_ARCHIVE}"
+fi
 
 mkdir -p bin
 
