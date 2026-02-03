@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"sort"
@@ -54,12 +55,14 @@ func SendEvent(ctx context.Context, e Event) error {
 	client := &http.Client{Timeout: 4 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
+		slog.Warn("discord webhook send failed", "error", err)
 		return fmt.Errorf("send webhook: %w", err)
 	}
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, resp.Body)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		slog.Warn("discord webhook non-2xx", "status", resp.StatusCode)
 		return fmt.Errorf("webhook status: %d", resp.StatusCode)
 	}
 
