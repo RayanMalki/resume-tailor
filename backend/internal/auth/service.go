@@ -162,20 +162,20 @@ func (s *Service) LoginWithOAuth(ctx context.Context, provider, sub, email, disp
 	return s.createSession(ctx, id)
 }
 
-func (s *Service) createSession(ctx context.Context, userID uuid.UUID) (token string, expiresAt time.Time, err error) {
+func (s *Service) createSession(ctx context.Context, userID uuid.UUID) (token string, expiresAt time.Time, outUserID uuid.UUID, err error) {
 	generatedToken, err := NewToken()
 	if err != nil {
-		return "", time.Time{}, err
+		return "", time.Time{}, uuid.Nil, err
 	}
 
 	tokenHash := HashToken(generatedToken)
 	timeExpiry := time.Now().Add(30 * 24 * time.Hour)
 
 	if err := s.repo.CreateSession(ctx, userID, tokenHash, timeExpiry); err != nil {
-		return "", time.Time{}, err
+		return "", time.Time{}, uuid.Nil, err
 	}
 
-	return generatedToken, timeExpiry, nil
+	return generatedToken, timeExpiry, userID, nil
 }
 
 func validatePassword(password string) error {
