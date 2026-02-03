@@ -47,7 +47,7 @@ func RenderResume(spec ai.ResumeSpec) string {
 	b.WriteString("\\usepackage{titlesec}\n")
 	b.WriteString("\\setlength{\\parindent}{0pt}\n")
 	b.WriteString("\\setlist[itemize]{noitemsep, topsep=2pt, leftmargin=*}\n")
-	b.WriteString("\\titleformat{\\section}{\\bfseries\\uppercase\\small}{}{0pt}{}\n")
+	b.WriteString("\\titleformat{\\section}{\\bfseries\\small}{}{0pt}{}\n")
 	b.WriteString("\\pagenumbering{gobble}\n")
 	b.WriteString("\\begin{document}\n")
 	b.WriteString("\\begin{center}\n")
