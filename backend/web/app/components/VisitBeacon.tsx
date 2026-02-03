@@ -1,17 +1,13 @@
 "use client";
 
 import { useEffect } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
 
 export default function VisitBeacon() {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const query = searchParams?.toString() ?? "";
-
   useEffect(() => {
-    if (!pathname) return;
+    if (typeof window === "undefined") return;
 
-    const page = query ? `${pathname}?${query}` : pathname;
+    const { pathname, search } = window.location;
+    const page = search ? `${pathname}${search}` : pathname;
     const payload = JSON.stringify({
       page,
       referrer: document.referrer || null,
@@ -29,7 +25,7 @@ export default function VisitBeacon() {
       body: payload,
       keepalive: true
     }).catch(() => {});
-  }, [pathname, query]);
+  }, []);
 
   return null;
 }
