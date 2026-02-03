@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -78,6 +79,17 @@ func GoogleCallback(authSvc *auth.Service) http.HandlerFunc {
 		redirectURL := strings.TrimSpace(os.Getenv("GOOGLE_REDIRECT_URL"))
 		frontendOrigin := strings.TrimSpace(os.Getenv("FRONTEND_ORIGIN"))
 		if clientID == "" || clientSecret == "" || redirectURL == "" {
+			missing := []string{}
+			if clientID == "" {
+				missing = append(missing, "GOOGLE_CLIENT_ID")
+			}
+			if clientSecret == "" {
+				missing = append(missing, "GOOGLE_CLIENT_SECRET")
+			}
+			if redirectURL == "" {
+				missing = append(missing, "GOOGLE_REDIRECT_URL")
+			}
+			slog.Warn("google oauth not configured", "missing", strings.Join(missing, ","))
 			writeError(w, http.StatusNotImplemented, "google_oauth_not_configured")
 			return
 		}
