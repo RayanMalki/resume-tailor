@@ -37,6 +37,10 @@ func Signup(authSvc *auth.Service) http.HandlerFunc {
 				http.Error(w, "Email already in use", http.StatusConflict)
 				return
 			}
+			if errors.Is(err, auth.ErrWeakPassword) {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}

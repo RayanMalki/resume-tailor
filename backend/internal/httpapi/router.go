@@ -35,6 +35,8 @@ func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes
 		r.Post("/auth/signup", handlers.Signup(authSvc))
 		r.Post("/auth/login", handlers.Login(authSvc))
 		r.Post("/auth/logout", handlers.Logout(authSvc))
+		r.Get("/auth/google/start", handlers.GoogleStart(authSvc))
+		r.Get("/auth/google/callback", handlers.GoogleCallback(authSvc))
 
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.AuthRequired(authSvc))

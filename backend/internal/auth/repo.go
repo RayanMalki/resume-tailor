@@ -44,10 +44,30 @@ RETURNING id`
 	return id, nil
 }
 
+// CreateOAuthUser creates a user with an OAuth provider and sub.
+func (r *Repo) CreateOAuthUser(ctx context.Context, email, passwordHash, displayName, provider, sub string) (uuid.UUID, error) {
+	const q = `
+INSERT INTO users (email, password_hash, display_name, auth_provider, oauth_provider, oauth_sub)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id`
+
+	var id uuid.UUID
+	err := r.db.QueryRow(ctx, q, email, passwordHash, displayName, provider, provider, sub).Scan(&id)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return uuid.Nil, ErrEmailTaken
+		}
+		return uuid.Nil, err
+	}
+
+	return id, nil
+}
+
 // GetUserByEmail fetches a user by email.
 func (r *Repo) GetUserByEmail(ctx context.Context, email string) (User, error) {
 	const q = `
-	SELECT id, email, password_hash, display_name, created_at
+	SELECT id, email, password_hash, display_name, auth_provider, oauth_provider, oauth_sub, created_at, updated_at
 	FROM users
 	WHERE email = $1`
 
@@ -57,7 +77,11 @@ func (r *Repo) GetUserByEmail(ctx context.Context, email string) (User, error) {
 		&u.Email,
 		&u.PasswordHash,
 		&u.DisplayName,
+		&u.AuthProvider,
+		&u.OAuthProvider,
+		&u.OAuthSub,
 		&u.CreatedAt,
+		&u.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -67,6 +91,59 @@ func (r *Repo) GetUserByEmail(ctx context.Context, email string) (User, error) {
 	}
 
 	return u, nil
+}
+
+// GetUserByOAuth fetches a user by oauth provider+sub.
+func (r *Repo) GetUserByOAuth(ctx context.Context, provider, sub string) (User, error) {
+	const q = `
+	SELECT id, email, password_hash, display_name, auth_provider, oauth_provider, oauth_sub, created_at, updated_at
+	FROM users
+	WHERE oauth_provider = $1 AND oauth_sub = $2`
+
+	var u User
+	err := r.db.QueryRow(ctx, q, provider, sub).Scan(
+		&u.ID,
+		&u.Email,
+		&u.PasswordHash,
+		&u.DisplayName,
+		&u.AuthProvider,
+		&u.OAuthProvider,
+		&u.OAuthSub,
+		&u.CreatedAt,
+		&u.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return User{}, ErrUserNotFound
+		}
+		return User{}, err
+	}
+
+	return u, nil
+}
+
+// LinkOAuth sets oauth provider/sub for an existing user if not already set.
+func (r *Repo) LinkOAuth(ctx context.Context, userID uuid.UUID, provider, sub string) error {
+	if userID == uuid.Nil {
+		return fmt.Errorf("bad input: user_id")
+	}
+	if provider == "" || sub == "" {
+		return fmt.Errorf("bad input: oauth")
+	}
+
+	const q = `
+	UPDATE users
+	SET oauth_provider = $2, oauth_sub = $3, updated_at = now()
+	WHERE id = $1 AND oauth_provider IS NULL AND oauth_sub IS NULL`
+
+	cmd, err := r.db.Exec(ctx, q, userID, provider, sub)
+	if err != nil {
+		return err
+	}
+	if cmd.RowsAffected() == 0 {
+		return fmt.Errorf("oauth already linked")
+	}
+	return nil
 }
 
 // CreateSession creates a new session row for the given user.

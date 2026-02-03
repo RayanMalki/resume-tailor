@@ -8,12 +8,15 @@ import (
 )
 
 type User struct {
-	ID           uuid.UUID
-	Email        string
-	PasswordHash string
-	DisplayName  string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID            uuid.UUID
+	Email         string
+	PasswordHash  string
+	DisplayName   string
+	AuthProvider  string
+	OAuthProvider *string
+	OAuthSub      *string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 var (
@@ -21,4 +24,5 @@ var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrUserNotFound       = errors.New("user not found")
 	ErrTokenNotFound      = errors.New("token not found")
+	ErrWeakPassword       = errors.New("weak password")
 )
