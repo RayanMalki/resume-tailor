@@ -1,6 +1,20 @@
 import "./globals.css";
 import type { ReactNode } from "react";
+import { IBM_Plex_Sans, Space_Grotesk } from "next/font/google";
 import VisitBeacon from "./components/VisitBeacon";
+
+const grotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-grotesk",
+  display: "swap"
+});
+
+const plex = IBM_Plex_Sans({
+  subsets: ["latin"],
+  variable: "--font-plex",
+  display: "swap",
+  weight: ["400", "500", "600", "700"]
+});
 
 export const metadata = {
   title: "Resume Tailor",
@@ -9,8 +23,8 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <body className="min-h-screen">
+    <html lang="en" className={`${grotesk.variable} ${plex.variable}`}>
+      <body className="min-h-screen font-plex">
         <VisitBeacon />
         {children}
       </body>

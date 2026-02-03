@@ -48,33 +48,33 @@ function JobPageInner() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-ink-950 text-slate-100">
       <TopBar showLogout />
       <main className="mx-auto flex w-full max-w-5xl flex-1 items-start justify-center px-6 py-16">
-        <div className="w-full max-w-2xl rounded-2xl bg-white p-8 shadow-card">
-          <h1 className="text-xl font-semibold text-slate-900">Paste job description</h1>
-          <p className="mt-2 text-sm text-slate-600">
+        <div className="w-full max-w-2xl rounded-[28px] border border-white/10 bg-ink-900/70 p-8 shadow-panel backdrop-blur">
+          <h1 className="text-2xl font-semibold text-white">Paste job description</h1>
+          <p className="mt-2 text-sm text-slate-400">
             We will tailor your resume to match this job description.
           </p>
 
           <div className="mt-6">
-            <label className="text-sm font-medium text-slate-700">Job description</label>
+            <label className="text-sm font-medium text-slate-200">Job description</label>
             <textarea
               value={jobText}
               onChange={(e) => setJobText(e.target.value)}
               rows={12}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-ink-950 px-3 py-2 text-slate-100"
               placeholder="Paste the job description here..."
             />
           </div>
 
-          {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
+          {error ? <p className="mt-4 text-sm text-rose-300">{error}</p> : null}
 
           <div className="mt-6 flex justify-end">
             <button
               onClick={handleGenerate}
               disabled={loading || jobText.trim().length === 0}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-white hover:bg-slate-800 disabled:opacity-70"
+              className="rounded-full bg-ember-500 px-5 py-2 text-sm font-semibold text-ink-950 shadow-glow transition hover:-translate-y-0.5 hover:bg-ember-400 disabled:opacity-70"
             >
               {loading ? "Generating..." : "Generate"}
             </button>
@@ -87,7 +87,7 @@ function JobPageInner() {
 
 export default function JobPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
+    <Suspense fallback={<div className="min-h-screen bg-ink-950" />}>
       <JobPageInner />
     </Suspense>
   );

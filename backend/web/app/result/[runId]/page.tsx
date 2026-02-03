@@ -123,51 +123,51 @@ export default function ResultPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-ink-950 text-slate-100">
       <TopBar showLogout />
       <main className="mx-auto flex w-full max-w-5xl flex-1 items-start justify-center px-6 py-16">
-        <div className="w-full max-w-3xl rounded-2xl bg-white p-8 shadow-card">
+        <div className="w-full max-w-3xl rounded-[28px] border border-white/10 bg-ink-900/70 p-8 shadow-panel backdrop-blur">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-xl font-semibold text-slate-900">Your tailored LaTeX</h1>
+            <h1 className="text-2xl font-semibold text-white">Your tailored LaTeX</h1>
             <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={handleGoToResume}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:border-slate-300"
+                className="rounded-full border border-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-slate-200 transition hover:border-ember-400/60 hover:text-ember-200"
               >
                 Upload new CV
               </button>
               <button
                 onClick={handleGoToJob}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:border-slate-300"
+                className="rounded-full border border-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-slate-200 transition hover:border-ember-400/60 hover:text-ember-200"
               >
                 Upload new job listing
               </button>
             </div>
           </div>
-          <p className="mt-2 text-sm text-slate-600">{loadingMessage}</p>
+          <p className="mt-2 text-sm text-slate-400">{loadingMessage}</p>
 
           {!latex ? (
             <div className="mt-6">
-              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+              <div className="h-2 w-full overflow-hidden rounded-full bg-ink-950">
                 <div
-                  className="h-full rounded-full bg-slate-900 transition-all"
+                  className="h-full rounded-full bg-ember-500 transition-all"
                   style={{ width: `${progress}%` }}
                 />
               </div>
-              {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
+              {error ? <p className="mt-4 text-sm text-rose-300">{error}</p> : null}
             </div>
           ) : (
             <div className="mt-6">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-slate-700">LaTeX output</span>
+                <span className="text-sm font-medium text-slate-200">LaTeX output</span>
                 <button
                   onClick={handleCopy}
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:border-slate-300"
+                  className="rounded-full border border-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-ember-200 transition hover:border-ember-400 hover:text-white"
                 >
                   Copy
                 </button>
               </div>
-              <pre className="mt-3 max-h-[420px] overflow-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-100">
+              <pre className="mt-3 max-h-[420px] overflow-auto rounded-2xl border border-white/10 bg-ink-950 p-4 text-xs text-slate-100">
 {latex}
               </pre>
             </div>

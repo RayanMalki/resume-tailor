@@ -3,13 +3,19 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 body {
-  @apply bg-slate-50 text-slate-900;
+  @apply bg-ink-950 text-slate-100;
 }
 
-input, textarea, button {
+input,
+textarea,
+button {
   font-family: inherit;
+}
+
+.bg-grid {
+  background-size: 120px 120px;
 }
