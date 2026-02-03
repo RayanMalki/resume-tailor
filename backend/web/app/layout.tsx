@@ -1,5 +1,6 @@
 import "./globals.css";
 import type { ReactNode } from "react";
+import VisitBeacon from "./components/VisitBeacon";
 
 export const metadata = {
   title: "Resume Tailor",
@@ -10,6 +11,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body className="min-h-screen">
+        <VisitBeacon />
         {children}
       </body>
     </html>
