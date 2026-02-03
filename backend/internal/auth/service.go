@@ -54,34 +54,38 @@ func (s *Service) Signup(ctx context.Context, email string, password string, dis
 }
 
 func (s *Service) Login(ctx context.Context, email string, password string) (token string, expiresAt time.Time, err error) {
+	token, expiresAt, _, err = s.LoginWithUser(ctx, email, password)
+	return token, expiresAt, err
+}
 
+func (s *Service) LoginWithUser(ctx context.Context, email string, password string) (token string, expiresAt time.Time, userID uuid.UUID, err error) {
 	loginEmail := strings.TrimSpace(strings.ToLower(email))
 	if loginEmail == "" {
-		return "", time.Time{}, fmt.Errorf("you must enter an email")
+		return "", time.Time{}, uuid.Nil, fmt.Errorf("you must enter an email")
 	}
 
 	if password == "" {
-		return "", time.Time{}, fmt.Errorf("you must enter a password")
+		return "", time.Time{}, uuid.Nil, fmt.Errorf("you must enter a password")
 	}
 
 	u, err := s.repo.GetUserByEmail(ctx, loginEmail)
 	if errors.Is(err, ErrUserNotFound) {
-		return "", time.Time{}, ErrInvalidCredentials
+		return "", time.Time{}, uuid.Nil, ErrInvalidCredentials
 	}
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("error while searching the email of the user: %v", err)
+		return "", time.Time{}, uuid.Nil, fmt.Errorf("error while searching the email of the user: %v", err)
 
 	}
 
 	psswErr := CheckPassword(u.PasswordHash, password)
 	if psswErr != nil {
-		return "", time.Time{}, ErrInvalidCredentials
+		return "", time.Time{}, uuid.Nil, ErrInvalidCredentials
 
 	}
 
 	generatedToken, err := NewToken()
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("error generating token: %v", err)
+		return "", time.Time{}, uuid.Nil, fmt.Errorf("error generating token: %v", err)
 
 	}
 
@@ -91,10 +95,10 @@ func (s *Service) Login(ctx context.Context, email string, password string) (tok
 
 	sessErr := s.repo.CreateSession(ctx, u.ID, tokenHash, timeExpiry)
 	if sessErr != nil {
-		return "", time.Time{}, fmt.Errorf("error while creating session: %v", sessErr)
+		return "", time.Time{}, uuid.Nil, fmt.Errorf("error while creating session: %v", sessErr)
 
 	}
 
-	return generatedToken, timeExpiry, nil
+	return generatedToken, timeExpiry, u.ID, nil
 
 }

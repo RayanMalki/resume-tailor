@@ -1,12 +1,16 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"resume-tailor/internal/auth"
 	"resume-tailor/internal/httpapi/cookies"
+	"resume-tailor/internal/httpapi/middleware"
+	"resume-tailor/internal/notify"
 )
 
 type SignupRequest struct {
@@ -49,5 +53,19 @@ func Signup(authSvc *auth.Service) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(SignupResponse{UserID: id.String()})
+
+		go func() {
+			_ = notify.SendEvent(context.Background(), notify.Event{
+				Type:      "signup_success",
+				Path:      r.URL.Path,
+				Method:    r.Method,
+				Status:    http.StatusCreated,
+				IP:        middleware.ClientIP(r),
+				UserAgent: r.UserAgent(),
+				UserID:    id.String(),
+				Meta:      map[string]string{},
+				TS:        time.Now().UTC(),
+			})
+		}()
 	}
 }

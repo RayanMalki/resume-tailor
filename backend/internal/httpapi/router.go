@@ -21,6 +21,9 @@ func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes
 	r.Use(middleware.Recover)
 	r.Use(middleware.Logging)
 	r.Use(middleware.CORS(allowedOrigins))
+	r.Use(middleware.Limits)
+	r.Use(middleware.SuspiciousScanBlocker)
+	r.Use(middleware.RateLimit)
 
 	// v1 API routes
 	r.Route("/v1", func(r chi.Router) {

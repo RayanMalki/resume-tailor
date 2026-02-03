@@ -40,11 +40,29 @@ func Logging(next http.Handler) http.Handler {
 		}
 
 		duration := time.Since(start)
-		slog.Info("request",
+		userID, ok := UserIDFromContext(r.Context())
+		userIDVal := ""
+		if ok {
+			userIDVal = userID.String()
+		}
+		ip := ClientIP(r)
+
+		level := slog.LevelInfo
+		if recorder.status == http.StatusTooManyRequests || isSuspiciousPath(r.URL.Path) {
+			level = slog.LevelWarn
+		}
+		if recorder.status >= 500 {
+			level = slog.LevelError
+		}
+
+		slog.Log(r.Context(), level, "request",
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", recorder.status,
-			"duration", duration,
+			"latency_ms", duration.Milliseconds(),
+			"ip", ip,
+			"user_agent", r.UserAgent(),
+			"user_id", userIDVal,
 		)
 	})
 }

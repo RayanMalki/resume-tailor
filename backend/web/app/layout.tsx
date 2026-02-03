@@ -1,7 +1,6 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import { IBM_Plex_Sans, Space_Grotesk } from "next/font/google";
-import VisitBeacon from "./components/VisitBeacon";
 
 const grotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -25,7 +24,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${grotesk.variable} ${plex.variable}`}>
       <body className="min-h-screen font-plex">
-        <VisitBeacon />
         {children}
       </body>
     </html>

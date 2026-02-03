@@ -1,11 +1,15 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"time"
 
 	"resume-tailor/internal/httpapi/middleware"
+	"resume-tailor/internal/notify"
 	"resume-tailor/internal/resumes"
 	"resume-tailor/internal/runs"
 
@@ -26,6 +30,29 @@ func CreateRunHandler(runsSvc *runs.Service, resumesSvc *resumes.Service) http.H
 		userID, ok := middleware.UserIDFromContext(r.Context())
 		if !ok {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+
+		if allowed, res := middleware.AllowRunCreate(userID); !allowed {
+			go func() {
+				_ = notify.SendEvent(context.Background(), notify.Event{
+					Type:      "rate_limited",
+					Path:      r.URL.Path,
+					Method:    r.Method,
+					Status:    http.StatusTooManyRequests,
+					IP:        middleware.ClientIP(r),
+					UserAgent: r.UserAgent(),
+					UserID:    userID.String(),
+					Meta: map[string]string{
+						"limit":     fmt.Sprintf("%d", res.Limit),
+						"remaining": fmt.Sprintf("%d", res.Remain),
+						"window":    res.Window.String(),
+						"scope":     "user_runs",
+					},
+					TS: time.Now().UTC(),
+				})
+			}()
+			writeError(w, http.StatusTooManyRequests, "rate_limited")
 			return
 		}
 
@@ -70,5 +97,21 @@ func CreateRunHandler(runsSvc *runs.Service, resumesSvc *resumes.Service) http.H
 		writeJSON(w, http.StatusCreated, CreateRunResponse{
 			RunID: run.ID.String(),
 		})
+
+		go func() {
+			_ = notify.SendEvent(context.Background(), notify.Event{
+				Type:      "run_created",
+				Path:      r.URL.Path,
+				Method:    r.Method,
+				Status:    http.StatusCreated,
+				IP:        middleware.ClientIP(r),
+				UserAgent: r.UserAgent(),
+				UserID:    userID.String(),
+				Meta: map[string]string{
+					"run_id": run.ID.String(),
+				},
+				TS: time.Now().UTC(),
+			})
+		}()
 	}
 }

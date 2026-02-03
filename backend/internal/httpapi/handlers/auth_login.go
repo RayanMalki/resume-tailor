@@ -1,12 +1,16 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"resume-tailor/internal/auth"
 	"resume-tailor/internal/httpapi/cookies"
+	"resume-tailor/internal/httpapi/middleware"
+	"resume-tailor/internal/notify"
 )
 
 type LoginRequest struct {
@@ -22,7 +26,7 @@ func Login(authSvc *auth.Service) http.HandlerFunc {
 			return
 		}
 
-		token, expiresAt, err := authSvc.Login(r.Context(), req.Email, req.Password)
+		token, expiresAt, userID, err := authSvc.LoginWithUser(r.Context(), req.Email, req.Password)
 		if err != nil {
 			if errors.Is(err, auth.ErrInvalidCredentials) {
 				http.Error(w, "Unauthorized: invalid credentials", http.StatusUnauthorized)
@@ -34,5 +38,19 @@ func Login(authSvc *auth.Service) http.HandlerFunc {
 
 		cookies.SetSessionCookie(w, token, expiresAt)
 		w.WriteHeader(http.StatusNoContent)
+
+		go func() {
+			_ = notify.SendEvent(context.Background(), notify.Event{
+				Type:      "login_success",
+				Path:      r.URL.Path,
+				Method:    r.Method,
+				Status:    http.StatusNoContent,
+				IP:        middleware.ClientIP(r),
+				UserAgent: r.UserAgent(),
+				UserID:    userID.String(),
+				Meta:      map[string]string{},
+				TS:        time.Now().UTC(),
+			})
+		}()
 	}
 }
