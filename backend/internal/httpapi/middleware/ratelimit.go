@@ -100,13 +100,6 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 			}
 		}
 
-		if strings.Contains(r.URL.Path, "/artifacts/") {
-			if allowed, res := rl.uploads.Allow(ip); !allowed {
-				rl.respondRateLimited(w, r, res)
-				return
-			}
-		}
-
 		next.ServeHTTP(w, r)
 	})
 }
