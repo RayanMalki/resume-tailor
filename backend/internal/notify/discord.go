@@ -11,6 +11,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -30,9 +31,14 @@ type payload struct {
 	Content string `json:"content"`
 }
 
+var warnMissingWebhookOnce sync.Once
+
 func SendEvent(ctx context.Context, e Event) error {
 	webhook := strings.TrimSpace(os.Getenv("DISCORD_WEBHOOK_URL"))
 	if webhook == "" {
+		warnMissingWebhookOnce.Do(func() {
+			slog.Warn("discord webhook disabled (DISCORD_WEBHOOK_URL not set)")
+		})
 		return nil
 	}
 

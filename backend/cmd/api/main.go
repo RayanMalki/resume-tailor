@@ -30,6 +30,11 @@ func main() {
 		slog.Error("failed to load config", "error", err)
 		os.Exit(1)
 	}
+	if strings.TrimSpace(os.Getenv("DISCORD_WEBHOOK_URL")) == "" {
+		slog.Warn("discord webhook disabled (DISCORD_WEBHOOK_URL not set)")
+	} else {
+		slog.Info("discord webhook enabled")
+	}
 	pool, err := db.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
 		slog.Error("failed to connect to db", "error", err)
