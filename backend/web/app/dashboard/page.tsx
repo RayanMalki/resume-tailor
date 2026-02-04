@@ -31,6 +31,33 @@ type ScorePoint = {
   score: number;
 };
 
+const parseScore = (atsRaw: unknown): number | null => {
+  const parsed = typeof atsRaw === "string" ? (() => {
+    try {
+      return JSON.parse(atsRaw);
+    } catch {
+      return null;
+    }
+  })() : atsRaw;
+
+  if (!parsed || typeof parsed !== "object") return null;
+
+  const asRecord = parsed as Record<string, unknown>;
+  const directScore = asRecord.score;
+  if (typeof directScore === "number") return directScore;
+
+  const nested =
+    asRecord.ats_report ||
+    asRecord.atsReport ||
+    asRecord.ATSReport;
+  if (nested && typeof nested === "object") {
+    const nestedScore = (nested as Record<string, unknown>).score;
+    if (typeof nestedScore === "number") return nestedScore;
+  }
+
+  return null;
+};
+
 export default function DashboardPage() {
   const router = useRouter();
   const [runs, setRuns] = useState<RunItem[]>([]);
@@ -69,10 +96,9 @@ export default function DashboardPage() {
             if (!reportRes.ok) return null;
             const report = await reportRes.json();
             const atsRaw = report.ATSReport ?? report.atsReport ?? report.ats_report;
-            const ats =
-              typeof atsRaw === "string" ? (JSON.parse(atsRaw) as { score?: number }) : atsRaw;
+            const parsedScore = parseScore(atsRaw);
             const scoreValue =
-              typeof ats?.score === "number" ? Math.round(ats.score * 100) : null;
+              typeof parsedScore === "number" ? Math.round(parsedScore * 100) : null;
             if (scoreValue === null) return null;
             return { runId, score: scoreValue };
           })
