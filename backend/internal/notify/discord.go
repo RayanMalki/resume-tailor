@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -58,21 +59,85 @@ func SendEvent(ctx context.Context, e Event) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 4 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		slog.Warn("discord webhook send failed", "error", err)
-		return fmt.Errorf("send webhook: %w", err)
-	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, resp.Body)
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		slog.Warn("discord webhook non-2xx", "status", resp.StatusCode)
-		return fmt.Errorf("webhook status: %d", resp.StatusCode)
+	client := &http.Client{Timeout: 10 * time.Second}
+	if err := sendWithRetry(ctx, client, req, body); err != nil {
+		return err
 	}
 
 	return nil
+}
+
+func sendWithRetry(ctx context.Context, client *http.Client, baseReq *http.Request, body []byte) error {
+	const maxAttempts = 3
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, baseReq.Method, baseReq.URL.String(), bytes.NewReader(body))
+		if err != nil {
+			return fmt.Errorf("build request: %w", err)
+		}
+		req.Header = baseReq.Header.Clone()
+
+		resp, err := client.Do(req)
+		if err != nil {
+			slog.Warn("discord webhook send failed", "error", err)
+			return fmt.Errorf("send webhook: %w", err)
+		}
+
+		bodyPreview, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		_ = resp.Body.Close()
+
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return nil
+		}
+
+		if resp.StatusCode == http.StatusTooManyRequests && attempt < maxAttempts {
+			retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
+			if retryAfter > 0 {
+				slog.Warn("discord webhook rate limited", "retry_after", retryAfter)
+				if !sleepCtx(ctx, retryAfter) {
+					return ctx.Err()
+				}
+				continue
+			}
+		}
+
+		slog.Warn("discord webhook non-2xx", "status", resp.StatusCode, "body", string(bodyPreview))
+		return fmt.Errorf("webhook status: %d", resp.StatusCode)
+	}
+
+	return fmt.Errorf("webhook status: %d", http.StatusTooManyRequests)
+}
+
+func parseRetryAfter(value string) time.Duration {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+	if seconds, err := strconv.Atoi(value); err == nil {
+		if seconds <= 0 {
+			return 0
+		}
+		return time.Duration(seconds) * time.Second
+	}
+	if when, err := http.ParseTime(value); err == nil {
+		delay := time.Until(when)
+		if delay < 0 {
+			return 0
+		}
+		return delay
+	}
+	return 0
+}
+
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
 }
 
 func formatEvent(e Event) string {
