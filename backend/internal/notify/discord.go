@@ -33,6 +33,15 @@ type payload struct {
 }
 
 var warnMissingWebhookOnce sync.Once
+var dispatcherOnce sync.Once
+
+type queuedEvent struct {
+	ctx     context.Context
+	event   Event
+	webhook string
+}
+
+var eventQueue = make(chan queuedEvent, 100)
 
 func SendEvent(ctx context.Context, e Event) error {
 	webhook := strings.TrimSpace(os.Getenv("DISCORD_WEBHOOK_URL"))
@@ -47,27 +56,63 @@ func SendEvent(ctx context.Context, e Event) error {
 		e.TS = time.Now().UTC()
 	}
 
-	content := formatEvent(e)
-	body, err := json.Marshal(payload{Content: content})
-	if err != nil {
-		return fmt.Errorf("marshal payload: %w", err)
-	}
+	dispatcherOnce.Do(func() {
+		go startDispatcher()
+	})
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhook, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("build request: %w", err)
+	select {
+	case eventQueue <- queuedEvent{ctx: ctx, event: e, webhook: webhook}:
+		return nil
+	default:
+		slog.Warn("discord webhook queue full, dropping event")
+		return nil
 	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	if err := sendWithRetry(ctx, client, req, body); err != nil {
-		return err
-	}
-
-	return nil
 }
 
-func sendWithRetry(ctx context.Context, client *http.Client, baseReq *http.Request, body []byte) error {
+func startDispatcher() {
+	minInterval := parseDurationMsEnv("DISCORD_WEBHOOK_MIN_INTERVAL_MS", 1100)
+	maxRetryAfter := parseDurationMsEnv("DISCORD_WEBHOOK_MAX_RETRY_AFTER_MS", 120000)
+	if minInterval < 0 {
+		minInterval = 0
+	}
+	if maxRetryAfter < 0 {
+		maxRetryAfter = 0
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	var lastSent time.Time
+
+	for item := range eventQueue {
+		if minInterval > 0 && !lastSent.IsZero() {
+			wait := minInterval - time.Since(lastSent)
+			if wait > 0 {
+				time.Sleep(wait)
+			}
+		}
+
+		content := formatEvent(item.event)
+		body, err := json.Marshal(payload{Content: content})
+		if err != nil {
+			slog.Warn("discord webhook marshal failed", "error", err)
+			continue
+		}
+
+		req, err := http.NewRequestWithContext(item.ctx, http.MethodPost, item.webhook, bytes.NewReader(body))
+		if err != nil {
+			slog.Warn("discord webhook request build failed", "error", err)
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		if err := sendWithRetry(item.ctx, client, req, body, maxRetryAfter); err != nil {
+			slog.Warn("discord webhook send failed", "error", err)
+		}
+
+		lastSent = time.Now()
+	}
+}
+
+func sendWithRetry(ctx context.Context, client *http.Client, baseReq *http.Request, body []byte, maxRetryAfter time.Duration) error {
 	const maxAttempts = 3
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
@@ -93,6 +138,10 @@ func sendWithRetry(ctx context.Context, client *http.Client, baseReq *http.Reque
 		if resp.StatusCode == http.StatusTooManyRequests && attempt < maxAttempts {
 			retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
 			if retryAfter > 0 {
+				if maxRetryAfter > 0 && retryAfter > maxRetryAfter {
+					slog.Warn("discord webhook rate limited, retry-after too long, dropping", "retry_after", retryAfter)
+					return fmt.Errorf("webhook status: %d", resp.StatusCode)
+				}
 				slog.Warn("discord webhook rate limited", "retry_after", retryAfter)
 				if !sleepCtx(ctx, retryAfter) {
 					return ctx.Err()
@@ -127,6 +176,18 @@ func parseRetryAfter(value string) time.Duration {
 		return delay
 	}
 	return 0
+}
+
+func parseDurationMsEnv(key string, defMs int) time.Duration {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return time.Duration(defMs) * time.Millisecond
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil {
+		return time.Duration(defMs) * time.Millisecond
+	}
+	return time.Duration(parsed) * time.Millisecond
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) bool {
