@@ -45,6 +45,11 @@ type ProjectControl struct {
 	Mode string `json:"mode"`
 }
 
+type ProjectReason struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
+}
+
 type ResumeExperience struct {
 	Company  string   `json:"company"`
 	Role     string   `json:"role"`
@@ -382,6 +387,96 @@ func buildResumeSpecPrompt(resumeText, jobText string, bm25Signals any, projectC
     }
   ],
   "skills": []
+}`)
+	return b.String()
+}
+
+func (c *Client) GenerateProjectReasons(ctx context.Context, resumeText, jobText, latex string, bm25Signals any, projectControls []ProjectControl) ([]ProjectReason, error) {
+	prompt := buildProjectReasonsPrompt(resumeText, jobText, latex, bm25Signals, projectControls)
+
+	req := openai.ChatCompletionNewParams{
+		Model: c.model,
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage("You are a resume analyst. Return ONLY JSON in the requested format."),
+			openai.UserMessage(prompt),
+		},
+		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
+			OfJSONObject: func() *shared.ResponseFormatJSONObjectParam {
+				p := shared.NewResponseFormatJSONObjectParam()
+				return &p
+			}(),
+		},
+	}
+
+	resp, err := c.client.Chat.Completions.New(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("OpenAI API error: %w", err)
+	}
+	if len(resp.Choices) == 0 {
+		return nil, fmt.Errorf("no choices in OpenAI response")
+	}
+	content := strings.TrimSpace(resp.Choices[0].Message.Content)
+	if content == "" {
+		return nil, fmt.Errorf("empty content in OpenAI response")
+	}
+
+	var parsed struct {
+		Projects []ProjectReason `json:"projects"`
+	}
+	if err := json.Unmarshal([]byte(content), &parsed); err != nil {
+		return nil, fmt.Errorf("failed to parse project reasons JSON: %w", err)
+	}
+	return parsed.Projects, nil
+}
+
+func buildProjectReasonsPrompt(resumeText, jobText, latex string, bm25Signals any, projectControls []ProjectControl) string {
+	var b strings.Builder
+	b.WriteString("Return ONLY JSON. No LaTeX. No commentary.\n")
+	b.WriteString("Explain ONLY accepted/included projects and why each is relevant to the job.\n")
+	b.WriteString("Use the job description, resume source, BM25 signals, project controls, and final LaTeX.\n")
+	b.WriteString("Rules:\n")
+	b.WriteString("- Include only projects that are present in final LaTeX.\n")
+	b.WriteString("- One concise but specific reason per project (18-45 words).\n")
+	b.WriteString("- Mention concrete alignment: stack, domain, impact, keywords, responsibilities.\n")
+	b.WriteString("- If a project was pinned and included, mention that it was user-pinned while still stating technical relevance.\n\n")
+
+	b.WriteString("PROJECT CONTROLS:\n")
+	controls, err := json.MarshalIndent(projectControls, "", "  ")
+	if err != nil {
+		b.WriteString("[]\n\n")
+	} else {
+		b.WriteString(string(controls))
+		b.WriteString("\n\n")
+	}
+
+	b.WriteString("RESUME:\n")
+	b.WriteString(resumeText)
+	b.WriteString("\n\n")
+	b.WriteString("JOB DESCRIPTION:\n")
+	b.WriteString(jobText)
+	b.WriteString("\n\n")
+	if bm25Signals != nil {
+		b.WriteString("BM25 SIGNALS:\n")
+		serialized, err := json.MarshalIndent(bm25Signals, "", "  ")
+		if err != nil {
+			b.WriteString("(BM25 analysis available, failed to serialize)\n\n")
+		} else {
+			b.WriteString(string(serialized))
+			b.WriteString("\n\n")
+		}
+	}
+	b.WriteString("FINAL LATEX:\n")
+	b.WriteString(latex)
+	b.WriteString("\n\n")
+
+	b.WriteString("Return JSON in this format:\n")
+	b.WriteString(`{
+  "projects": [
+    {
+      "name": "",
+      "reason": ""
+    }
+  ]
 }`)
 	return b.String()
 }

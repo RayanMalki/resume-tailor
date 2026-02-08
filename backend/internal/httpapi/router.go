@@ -47,6 +47,7 @@ func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes
 			r.Get("/runs/{runID}/report", handlers.GetRunReportHandler(runsSvc, reportsSvc))
 			r.Get("/runs/{runID}/artifacts/resume-latex", handlers.GetResumeLatexArtifactHandler(runsSvc, artifactsSvc))
 			r.Get("/runs/{runID}/artifacts/resume-pdf", handlers.GetResumePDFArtifactHandler(runsSvc, artifactsSvc))
+			r.Get("/runs/{runID}/artifacts/project-reasons", handlers.GetProjectReasonsArtifactHandler(runsSvc, artifactsSvc))
 			r.Get("/runs", handlers.ListRunsHandler(runsSvc))
 			r.Get("/resumes", handlers.ListResumesHandler(resumesSvc))
 			r.Get("/resumes/{resumeID}", handlers.GetResumeByIDHandler(resumesSvc))

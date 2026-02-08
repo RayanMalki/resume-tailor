@@ -153,6 +153,12 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		return fmt.Errorf("OPENAI_API_KEY missing")
 	}
 
+	// 1. Load the run
+	runData, err := w.runsRepo.GetRunByID(ctx, runID)
+	if err != nil {
+		return fmt.Errorf("failed to load run: %w", err)
+	}
+
 	reportExists := false
 	if w.reportsSvc != nil {
 		if _, err := w.reportsSvc.GetRunReportByRunID(ctx, runID); err == nil {
@@ -180,15 +186,19 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		}
 	}
 
-	if reportExists && latexExists && (pdfExists || !w.pdfEnabled) {
-		slog.Info("run report and artifacts already exist, skipping", "run_id", runID)
-		return nil
+	reasonsExists := false
+	if w.artifacts != nil {
+		if _, err := w.artifacts.GetByRunIDAndType(ctx, runID, artifacts.TypeProjectReasons); err == nil {
+			reasonsExists = true
+		} else if err != nil && err != artifacts.ErrArtifactNotFound {
+			return fmt.Errorf("failed to check existing project reasons artifact: %w", err)
+		}
 	}
 
-	// 1. Load the run
-	runData, err := w.runsRepo.GetRunByID(ctx, runID)
-	if err != nil {
-		return fmt.Errorf("failed to load run: %w", err)
+	needsReasons := len(runData.ProjectControls) > 0
+	if reportExists && latexExists && (pdfExists || !w.pdfEnabled) && (!needsReasons || reasonsExists) {
+		slog.Info("run report and artifacts already exist, skipping", "run_id", runID)
+		return nil
 	}
 
 	// 2. Load the resume
@@ -287,6 +297,20 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 				}
 			}
 		}
+
+		if needsReasons && !reasonsExists {
+			reasons, err := w.aiClient.GenerateProjectReasons(ctx, resumeText, jobText, latexDoc, bm25Signals, runData.ProjectControls)
+			if err != nil {
+				slog.Warn("failed to generate project reasons; continuing without project reasons artifact", "run_id", runID, "error", err)
+			} else {
+				reasonsJSON, err := json.Marshal(reasons)
+				if err != nil {
+					slog.Warn("failed to marshal project reasons; continuing without project reasons artifact", "run_id", runID, "error", err)
+				} else if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeProjectReasons, string(reasonsJSON)); err != nil {
+					slog.Warn("failed to store project reasons artifact; continuing", "run_id", runID, "error", err)
+				}
+			}
+		}
 	}
 
 	// Placeholder JSON for artifacts (LaTeX/PDF generation not implemented yet)
@@ -353,6 +377,8 @@ func safeErrorMessage(err error) string {
 		return "latex_generation_failed"
 	case strings.Contains(msg, "generate resume spec"):
 		return "resume_spec_generation_failed"
+	case strings.Contains(msg, "project reasons"):
+		return "project_reasons_generation_failed"
 	case strings.Contains(msg, "compile resume pdf"):
 		return "pdf_generation_failed"
 	case strings.Contains(msg, "load resume"):
