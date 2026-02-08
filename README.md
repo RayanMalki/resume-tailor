@@ -13,6 +13,7 @@ Status: under active development.
 - Authenticated API with session cookies (`HttpOnly`) and ownership checks on private resources.
 - BM25 signal layer for explainable keyword coverage (missing, overlap, top terms).
 - LLM resume pipeline now uses a structured JSON spec + deterministic LaTeX renderer.
+- BM25 signals are injected into both LLM calls: ATS report generation and resume-spec generation.
 - Renderer is modeled after a Jake-style template and supports resume-language-aware section labels.
 - PDF generation is optional and best-effort (run can still succeed with LaTeX if PDF compile fails).
 
@@ -26,11 +27,13 @@ flowchart TB
   W["Worker"]
   BM25["BM25 scorer"]
   OAI["OpenAI"]
+  REPORTLLM["ATS report + change plan"]
   SPEC["ResumeSpec JSON<br/>language-aware + relevant projects"]
   RENDER["LaTeX Renderer<br/>(Jake-style template)"]
   TEX["artifact: resume_latex"]
   PDF["artifact: resume_pdf (optional)"]
   TECT["Tectonic compile (optional)"]
+  REPORTDB["run_reports"]
 
   UI --> API
   API --> DB
@@ -39,7 +42,11 @@ flowchart TB
   W --> DB
   W --> BM25
   W --> OAI
+  BM25 --> OAI
+  OAI --> REPORTLLM
   OAI --> SPEC
+  REPORTLLM --> REPORTDB
+  REPORTDB --> DB
   SPEC --> RENDER
   RENDER --> TEX
   TEX --> DB
@@ -51,7 +58,7 @@ flowchart TB
 ## Current Generation Flow
 1. Worker loads `resume.content_text` and run `job_text`.
 2. BM25 computes overlap/missing/top terms.
-3. OpenAI generates:
+3. OpenAI receives BM25 signals in prompt context for both calls, then generates:
    - ATS report + change plan
    - `ResumeSpec` JSON (not direct LaTeX)
 4. Backend renderer converts `ResumeSpec` -> final LaTeX using project template style.
@@ -60,6 +67,7 @@ flowchart TB
 
 Notes:
 - Resume tailoring preserves resume language (does not switch to job-posting language).
+- BM25 directly influences both scoring output and which resume content is emphasized for tailoring.
 - Relevant projects are included with higher content density than earlier versions.
 - PDF compile failure does not block run success when LaTeX is already generated.
 
