@@ -2,6 +2,7 @@ package runs
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -19,19 +20,26 @@ func NewRepo(db *pgxpool.Pool) *Repo {
 	return &Repo{db: db}
 }
 
-func (r *Repo) CreateRun(ctx context.Context, userID, resumeID uuid.UUID, jobText string) (Run, error) {
+func (r *Repo) CreateRun(ctx context.Context, userID, resumeID uuid.UUID, jobText string, projectControls []ProjectControl) (Run, error) {
+	controlsJSON, err := marshalProjectControls(projectControls)
+	if err != nil {
+		return Run{}, err
+	}
+
 	const q = `
-INSERT INTO runs (user_id, resume_id, job_text, status)
-VALUES ($1, $2, $3, $4)
-RETURNING id, user_id, resume_id, job_text, status, error_message, created_at, updated_at
+INSERT INTO runs (user_id, resume_id, job_text, project_controls, status)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, user_id, resume_id, job_text, project_controls, status, error_message, created_at, updated_at
 `
 
 	var run Run
-	err := r.db.QueryRow(ctx, q, userID, resumeID, jobText, StatusQueued).Scan(
+	var controlsRaw []byte
+	err = r.db.QueryRow(ctx, q, userID, resumeID, jobText, controlsJSON, StatusQueued).Scan(
 		&run.ID,
 		&run.UserID,
 		&run.ResumeID,
 		&run.JobText,
+		&controlsRaw,
 		&run.Status,
 		&run.ErrorMessage,
 		&run.CreatedAt,
@@ -40,6 +48,7 @@ RETURNING id, user_id, resume_id, job_text, status, error_message, created_at, u
 	if err != nil {
 		return Run{}, err
 	}
+	run.ProjectControls = unmarshalProjectControls(controlsRaw)
 
 	return run, nil
 }
@@ -50,15 +59,17 @@ func (r *Repo) GetRunByID(ctx context.Context, runID uuid.UUID) (Run, error) {
 
 	}
 	const q = `
-		SELECT id, user_id, resume_id, job_text, status, error_message, created_at, updated_at 
+		SELECT id, user_id, resume_id, job_text, project_controls, status, error_message, created_at, updated_at 
 		FROM runs where id = $1`
 
 	var run Run
+	var controlsRaw []byte
 	err := r.db.QueryRow(ctx, q, runID).Scan(
 		&run.ID,
 		&run.UserID,
 		&run.ResumeID,
 		&run.JobText,
+		&controlsRaw,
 		&run.Status,
 		&run.ErrorMessage,
 		&run.CreatedAt,
@@ -70,6 +81,7 @@ func (r *Repo) GetRunByID(ctx context.Context, runID uuid.UUID) (Run, error) {
 		}
 		return Run{}, err
 	}
+	run.ProjectControls = unmarshalProjectControls(controlsRaw)
 	return run, nil
 
 }
@@ -91,7 +103,7 @@ func (r *Repo) ListRunsByUser(ctx context.Context, userID uuid.UUID, limit, offs
 	}
 
 	const q = `
-SELECT id, user_id, resume_id, job_text, status, error_message, created_at, updated_at
+SELECT id, user_id, resume_id, job_text, project_controls, status, error_message, created_at, updated_at
 FROM runs
 WHERE user_id = $1
 ORDER BY created_at DESC
@@ -106,11 +118,13 @@ LIMIT $2 OFFSET $3`
 	runs := make([]Run, 0, limit)
 	for rows.Next() {
 		var run Run
+		var controlsRaw []byte
 		if err := rows.Scan(
 			&run.ID,
 			&run.UserID,
 			&run.ResumeID,
 			&run.JobText,
+			&controlsRaw,
 			&run.Status,
 			&run.ErrorMessage,
 			&run.CreatedAt,
@@ -118,6 +132,7 @@ LIMIT $2 OFFSET $3`
 		); err != nil {
 			return nil, err
 		}
+		run.ProjectControls = unmarshalProjectControls(controlsRaw)
 		runs = append(runs, run)
 	}
 
@@ -154,4 +169,26 @@ func (r *Repo) UpdateRunStatus(ctx context.Context, runID uuid.UUID, status stri
 	}
 
 	return nil
+}
+
+func marshalProjectControls(controls []ProjectControl) ([]byte, error) {
+	if len(controls) == 0 {
+		return []byte("[]"), nil
+	}
+	b, err := json.Marshal(controls)
+	if err != nil {
+		return nil, fmt.Errorf("marshal project_controls: %w", err)
+	}
+	return b, nil
+}
+
+func unmarshalProjectControls(raw []byte) []ProjectControl {
+	if len(raw) == 0 {
+		return nil
+	}
+	var controls []ProjectControl
+	if err := json.Unmarshal(raw, &controls); err != nil {
+		return nil
+	}
+	return controls
 }

@@ -40,6 +40,11 @@ type ResumeSkillGroup struct {
 	Items []string `json:"items"`
 }
 
+type ProjectControl struct {
+	Name string `json:"name"`
+	Mode string `json:"mode"`
+}
+
 type ResumeExperience struct {
 	Company  string   `json:"company"`
 	Role     string   `json:"role"`
@@ -242,8 +247,8 @@ func buildResumeLatexPrompt(resumeText, jobText string, bm25Signals any) string 
 }
 
 // GenerateResumeSpec generates a strict JSON resume spec for a fixed template.
-func (c *Client) GenerateResumeSpec(ctx context.Context, resumeText, jobText string, bm25Signals any) (ResumeSpec, error) {
-	prompt := buildResumeSpecPrompt(resumeText, jobText, bm25Signals)
+func (c *Client) GenerateResumeSpec(ctx context.Context, resumeText, jobText string, bm25Signals any, projectControls []ProjectControl) (ResumeSpec, error) {
+	prompt := buildResumeSpecPrompt(resumeText, jobText, bm25Signals, projectControls)
 
 	req := openai.ChatCompletionNewParams{
 		Model: c.model,
@@ -281,7 +286,7 @@ func (c *Client) GenerateResumeSpec(ctx context.Context, resumeText, jobText str
 	return spec, nil
 }
 
-func buildResumeSpecPrompt(resumeText, jobText string, bm25Signals any) string {
+func buildResumeSpecPrompt(resumeText, jobText string, bm25Signals any, projectControls []ProjectControl) string {
 	var b strings.Builder
 	b.WriteString("Return ONLY JSON. No LaTeX. No commentary. Use ASCII text only.\n")
 	b.WriteString("Create a one-page resume spec tailored to the job.\n")
@@ -320,6 +325,21 @@ func buildResumeSpecPrompt(resumeText, jobText string, bm25Signals any) string {
 			b.WriteString(string(serialized))
 			b.WriteString("\n\n")
 		}
+	}
+
+	if len(projectControls) > 0 {
+		b.WriteString("PROJECT CONTROLS:\n")
+		serialized, err := json.MarshalIndent(projectControls, "", "  ")
+		if err != nil {
+			b.WriteString("(project controls provided, failed to serialize)\n\n")
+		} else {
+			b.WriteString(string(serialized))
+			b.WriteString("\n\n")
+		}
+		b.WriteString("Control rules:\n")
+		b.WriteString("- mode=pinned: project MUST be included if found in source resume\n")
+		b.WriteString("- mode=exclude: project MUST NOT appear in output\n")
+		b.WriteString("- mode=auto: include when relevant\n\n")
 	}
 
 	b.WriteString("Return JSON in this exact format:\n")

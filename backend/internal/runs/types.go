@@ -17,14 +17,28 @@ const (
 )
 
 type Run struct {
-	ID           uuid.UUID
-	UserID       uuid.UUID
-	ResumeID     uuid.UUID
-	JobText      string
-	Status       Status
-	ErrorMessage *string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID              uuid.UUID
+	UserID          uuid.UUID
+	ResumeID        uuid.UUID
+	JobText         string
+	ProjectControls []ProjectControl
+	Status          Status
+	ErrorMessage    *string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+type ProjectControlMode string
+
+const (
+	ProjectControlPinned  ProjectControlMode = "pinned"
+	ProjectControlAuto    ProjectControlMode = "auto"
+	ProjectControlExclude ProjectControlMode = "exclude"
+)
+
+type ProjectControl struct {
+	Name string             `json:"name"`
+	Mode ProjectControlMode `json:"mode"`
 }
 
 var (

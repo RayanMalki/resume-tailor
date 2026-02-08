@@ -17,8 +17,9 @@ import (
 )
 
 type CreateRunRequest struct {
-	ResumeID string `json:"resumeId"`
-	JobText  string `json:"jobText"`
+	ResumeID        string                `json:"resumeId"`
+	JobText         string                `json:"jobText"`
+	ProjectControls []runs.ProjectControl `json:"projectControls"`
 }
 
 type CreateRunResponse struct {
@@ -79,7 +80,7 @@ func CreateRunHandler(runsSvc *runs.Service, resumesSvc *resumes.Service) http.H
 			return
 		}
 
-		run, err := runsSvc.CreateRun(r.Context(), userID, resumeID, req.JobText)
+		run, err := runsSvc.CreateRun(r.Context(), userID, resumeID, req.JobText, req.ProjectControls)
 		if err != nil {
 			if errors.Is(err, runs.ErrBadInput) {
 				// Return the detailed validation message (ex: "bad input: job_text")

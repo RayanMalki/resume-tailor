@@ -6,6 +6,13 @@ import TopBar from "../../components/TopBar";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 
+type ProjectMode = "pinned" | "auto" | "exclude";
+
+type ProjectControl = {
+  name: string;
+  mode: ProjectMode;
+};
+
 export default function ResultPage() {
   const router = useRouter();
   const params = useParams<{ runId: string }>();
@@ -16,11 +23,39 @@ export default function ResultPage() {
   const [resumeId, setResumeId] = useState<string | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [projectControls, setProjectControls] = useState<ProjectControl[]>([]);
 
   const loadingMessage = useMemo(() => {
     if (latex) return "Ready";
     return "Generating LaTeX...";
   }, [latex]);
+
+  const projectOutcomes = useMemo(() => {
+    if (projectControls.length === 0 || !latex) return [];
+    const latexLower = latex.toLowerCase();
+    return projectControls.map((control) => {
+      const included = latexLower.includes(control.name.toLowerCase());
+      let reason = "";
+      if (control.mode === "pinned") {
+        reason = included
+          ? "Pinned by you, so it was forced in."
+          : "Pinned by you, but not detected in final LaTeX by name match.";
+      } else if (control.mode === "exclude") {
+        reason = included
+          ? "Marked exclude, but still detected in final LaTeX by name match."
+          : "Excluded by your selection.";
+      } else {
+        reason = included
+          ? "Auto mode and considered relevant."
+          : "Auto mode and not selected as relevant.";
+      }
+      return {
+        ...control,
+        included,
+        reason
+      };
+    });
+  }, [projectControls, latex]);
 
   useEffect(() => {
     let timer: NodeJS.Timeout | undefined;
@@ -45,6 +80,28 @@ export default function ResultPage() {
         setResumeId((prev) => prev || raw);
       }
     };
+    const extractProjectControls = (data: Record<string, unknown>) => {
+      const raw =
+        data.projectControls ||
+        data.ProjectControls ||
+        data.project_controls;
+      if (!Array.isArray(raw)) return;
+      const parsed: ProjectControl[] = raw
+        .map((entry) => {
+          if (!entry || typeof entry !== "object") return null;
+          const obj = entry as Record<string, unknown>;
+          const name = typeof obj.name === "string" ? obj.name.trim() : "";
+          const modeRaw = typeof obj.mode === "string" ? obj.mode.trim().toLowerCase() : "auto";
+          const mode: ProjectMode =
+            modeRaw === "pinned" || modeRaw === "exclude" || modeRaw === "auto"
+              ? (modeRaw as ProjectMode)
+              : "auto";
+          if (!name) return null;
+          return { name, mode };
+        })
+        .filter((entry): entry is ProjectControl => Boolean(entry));
+      setProjectControls(parsed);
+    };
     const fetchRunMeta = async () => {
       try {
         const runRes = await fetch(`${API_BASE_URL}/v1/runs/${runId}`, {
@@ -57,6 +114,7 @@ export default function ResultPage() {
         if (runRes.ok) {
           const runData = await runRes.json();
           extractResumeId(runData);
+          extractProjectControls(runData);
         }
       } catch {
         // ignore metadata failures; resumeId is optional for navigation
@@ -87,6 +145,7 @@ export default function ResultPage() {
           if (runRes.ok) {
             const runData = await runRes.json();
             extractResumeId(runData);
+            extractProjectControls(runData);
             if (runData.status === "failed") {
               setError(runData.errorMessage || "Run failed");
             }
@@ -210,6 +269,38 @@ export default function ResultPage() {
                 </div>
               </div>
               {pdfError ? <p className="mt-3 text-xs text-rose-300">{pdfError}</p> : null}
+              {projectOutcomes.length > 0 ? (
+                <div className="mt-4 rounded-2xl border border-white/10 bg-ink-950/60 p-4">
+                  <h2 className="text-sm font-semibold text-slate-200">Project control outcomes</h2>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Inclusion is detected by project-name match in the generated LaTeX.
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {projectOutcomes.map((outcome) => (
+                      <div
+                        key={outcome.name}
+                        className="rounded-lg border border-white/10 bg-ink-900/70 px-3 py-2"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm text-slate-100">{outcome.name}</span>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.15em] ${
+                              outcome.included
+                                ? "bg-emerald-500/20 text-emerald-200"
+                                : "bg-slate-500/20 text-slate-300"
+                            }`}
+                          >
+                            {outcome.included ? "Included" : "Not included"}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-400">
+                          {outcome.mode.toUpperCase()}: {outcome.reason}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <pre className="mt-3 max-h-[420px] overflow-auto rounded-2xl border border-white/10 bg-ink-950 p-4 text-xs text-slate-100">
 {latex}
               </pre>

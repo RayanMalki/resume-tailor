@@ -20,7 +20,7 @@ func TestBuildResumeLatexPrompt(t *testing.T) {
 }
 
 func TestBuildResumeSpecPromptHasLanguageAndProjectRules(t *testing.T) {
-	prompt := buildResumeSpecPrompt("resume", "job", nil)
+	prompt := buildResumeSpecPrompt("resume", "job", nil, nil)
 
 	if !strings.Contains(prompt, "Use the resume's primary language for ALL section content.") {
 		t.Fatalf("expected resume language instruction")
@@ -36,5 +36,19 @@ func TestBuildResumeSpecPromptHasLanguageAndProjectRules(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "\"language\"") {
 		t.Fatalf("expected language field in schema")
+	}
+}
+
+func TestBuildResumeSpecPromptIncludesProjectControls(t *testing.T) {
+	prompt := buildResumeSpecPrompt("resume", "job", nil, []ProjectControl{
+		{Name: "Resume Tailor", Mode: "pinned"},
+		{Name: "Old App", Mode: "exclude"},
+	})
+
+	if !strings.Contains(prompt, "PROJECT CONTROLS:") {
+		t.Fatalf("expected project controls block")
+	}
+	if !strings.Contains(prompt, "mode=pinned") || !strings.Contains(prompt, "mode=exclude") {
+		t.Fatalf("expected project control rules")
 	}
 }

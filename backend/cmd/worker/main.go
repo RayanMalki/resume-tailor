@@ -97,10 +97,25 @@ func (a *runsRepoAdapter) GetRunByID(ctx context.Context, runID uuid.UUID) (jobs
 		return jobs.RunData{}, err
 	}
 	return jobs.RunData{
-		ID:           run.ID,
-		ResumeID:     run.ResumeID,
-		JobText:      run.JobText,
-		Status:       string(run.Status),
-		ErrorMessage: run.ErrorMessage,
+		ID:              run.ID,
+		ResumeID:        run.ResumeID,
+		JobText:         run.JobText,
+		ProjectControls: mapProjectControls(run.ProjectControls),
+		Status:          string(run.Status),
+		ErrorMessage:    run.ErrorMessage,
 	}, nil
+}
+
+func mapProjectControls(controls []runs.ProjectControl) []ai.ProjectControl {
+	if len(controls) == 0 {
+		return nil
+	}
+	out := make([]ai.ProjectControl, 0, len(controls))
+	for _, c := range controls {
+		out = append(out, ai.ProjectControl{
+			Name: c.Name,
+			Mode: string(c.Mode),
+		})
+	}
+	return out
 }

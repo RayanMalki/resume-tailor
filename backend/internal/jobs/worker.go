@@ -36,11 +36,12 @@ type RunsRepo interface {
 
 // RunData represents the run data needed by the worker
 type RunData struct {
-	ID           uuid.UUID
-	ResumeID     uuid.UUID
-	JobText      string
-	Status       string
-	ErrorMessage *string
+	ID              uuid.UUID
+	ResumeID        uuid.UUID
+	JobText         string
+	ProjectControls []ai.ProjectControl
+	Status          string
+	ErrorMessage    *string
 }
 
 type Worker struct {
@@ -264,7 +265,7 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 			}
 			latexDoc = existing.Content
 		} else {
-			spec, err := w.aiClient.GenerateResumeSpec(ctx, resumeText, jobText, bm25Signals)
+			spec, err := w.aiClient.GenerateResumeSpec(ctx, resumeText, jobText, bm25Signals, runData.ProjectControls)
 			if err != nil {
 				return fmt.Errorf("failed to generate resume spec: %w", err)
 			}

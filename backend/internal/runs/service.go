@@ -24,7 +24,7 @@ func NewService(repo *Repo, jobsEnq jobs.JobsEnqueuer) *Service {
 }
 
 func (s *Service) CreateRun(ctx context.Context, userID,
-	resumeID uuid.UUID, jobText string) (Run, error) {
+	resumeID uuid.UUID, jobText string, projectControls []ProjectControl) (Run, error) {
 
 	if userID == uuid.Nil {
 		return Run{}, fmt.Errorf("bad input: user_id")
@@ -41,7 +41,9 @@ func (s *Service) CreateRun(ctx context.Context, userID,
 
 	jobText = strings.TrimSpace(jobText)
 
-	run, err := s.repo.CreateRun(ctx, userID, resumeID, jobText)
+	normalizedControls := normalizeProjectControls(projectControls)
+
+	run, err := s.repo.CreateRun(ctx, userID, resumeID, jobText, normalizedControls)
 	if err != nil {
 		return Run{}, err
 	}
@@ -58,6 +60,33 @@ func (s *Service) CreateRun(ctx context.Context, userID,
 
 	return run, nil
 
+}
+
+func normalizeProjectControls(controls []ProjectControl) []ProjectControl {
+	if len(controls) == 0 {
+		return nil
+	}
+	out := make([]ProjectControl, 0, len(controls))
+	seen := make(map[string]struct{}, len(controls))
+	for _, c := range controls {
+		name := strings.TrimSpace(c.Name)
+		if name == "" {
+			continue
+		}
+		mode := c.Mode
+		switch mode {
+		case ProjectControlPinned, ProjectControlAuto, ProjectControlExclude:
+		default:
+			mode = ProjectControlAuto
+		}
+		key := strings.ToLower(name)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, ProjectControl{Name: name, Mode: mode})
+	}
+	return out
 }
 
 func (s *Service) GetRunByID(ctx context.Context, userID, runID uuid.UUID) (Run, error) {
