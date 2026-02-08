@@ -23,7 +23,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool) error {
 			return fmt.Errorf("read migration %s: %w", name, err)
 		}
 
-		sql := strings.TrimSpace(string(sqlBytes))
+		sql := strings.TrimSpace(extractGooseUpSQL(string(sqlBytes)))
 		if sql == "" {
 			continue
 		}
@@ -54,6 +54,23 @@ func Run(ctx context.Context, pool *pgxpool.Pool) error {
 	}
 
 	return nil
+}
+
+func extractGooseUpSQL(content string) string {
+	upMarker := "-- +goose Up"
+	downMarker := "-- +goose Down"
+
+	upIdx := strings.Index(content, upMarker)
+	if upIdx == -1 {
+		return content
+	}
+
+	afterUp := content[upIdx+len(upMarker):]
+	downIdx := strings.Index(afterUp, downMarker)
+	if downIdx == -1 {
+		return afterUp
+	}
+	return afterUp[:downIdx]
 }
 
 func listFiles() ([]string, error) {
