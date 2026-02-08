@@ -290,11 +290,12 @@ func buildResumeSpecPrompt(resumeText, jobText string, bm25Signals any) string {
 	b.WriteString("Use the resume's primary language for ALL section content.\n")
 	b.WriteString("Do NOT switch language to match the job posting language.\n")
 	b.WriteString("Constraints:\n")
-	b.WriteString("- Experience: up to 5 roles, 2-4 bullets each\n")
-	b.WriteString("- Projects: include EVERY project from the resume that is relevant to the job, 1-4 bullets each\n")
+	b.WriteString("- Experience: up to 5 roles, 5-6 bullets each\n")
+	b.WriteString("- Projects: include EVERY project from the resume that is relevant to the job, 5-8 bullets that are relevant to the job each\n")
 	b.WriteString("- Education: up to 2 entries\n")
 	b.WriteString("- Skills: group skills into categories (for example: Languages, Technologies, Concepts)\n")
-	b.WriteString("Keep bullets short (<= 18 words). Use action verbs.\n")
+	b.WriteString("Keep bullets short (20<x<= 30 words). Bullets have to use the format :used technlogie X to achieve Y and resulted in Z.\n")
+	b.WriteString("You have to put in bold the name of every language used, technologie and technical details")
 	b.WriteString("Use the resume content as the source. Do not invent companies, projects, degrees, dates, or achievements.\n")
 	b.WriteString("If space is tight, shorten bullets instead of dropping relevant projects.\n\n")
 
@@ -329,7 +330,7 @@ func buildResumeSpecPrompt(resumeText, jobText string, bm25Signals any) string {
       "school": "",
       "degree": "",
       "location": "",
-      "dates": "",
+		"dates": "",
       "details": [""]
     }
   ],
