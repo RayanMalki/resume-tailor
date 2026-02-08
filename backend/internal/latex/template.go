@@ -18,13 +18,13 @@ type RenderLimits struct {
 
 func RenderResume(spec ai.ResumeSpec) string {
 	limits := RenderLimits{
-		MaxExperience:     5,
-		MaxExpBullets:     4,
-		MaxProjBullets:    4,
-		MaxEducation:      2,
+		MaxExperience:     8,
+		MaxExpBullets:     6,
+		MaxProjBullets:    8,
+		MaxEducation:      3,
 		MaxSkillGroups:    6,
-		MaxSkillsPerGroup: 20,
-		MaxSkillsFallback: 24,
+		MaxSkillsPerGroup: 30,
+		MaxSkillsFallback: 36,
 	}
 
 	name := escapeLatex(fallback(spec.Name, "Candidate"))
