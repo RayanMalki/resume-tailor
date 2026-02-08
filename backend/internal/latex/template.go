@@ -49,7 +49,6 @@ func RenderResume(spec ai.ResumeSpec) string {
 	b.WriteString("\\usepackage{fancyhdr}\n")
 	b.WriteString("\\usepackage[english]{babel}\n")
 	b.WriteString("\\usepackage{tabularx}\n")
-	b.WriteString("\\input{glyphtounicode}\n")
 	b.WriteString("\\usepackage[default]{lato}\n\n")
 
 	b.WriteString("\\pagestyle{fancy}\n")
@@ -69,7 +68,9 @@ func RenderResume(spec ai.ResumeSpec) string {
 	b.WriteString("\\titleformat{\\section}{\n")
 	b.WriteString("  \\vspace{-4pt}\\scshape\\raggedright\\large\n")
 	b.WriteString("}{}{0em}{}[\\color{black}\\titlerule\\vspace{-5pt}]\n")
-	b.WriteString("\\pdfgentounicode=1\n\n")
+	b.WriteString("\\ifdefined\\pdfgentounicode\n")
+	b.WriteString("  \\pdfgentounicode=1\n")
+	b.WriteString("\\fi\n\n")
 
 	b.WriteString("\\newcommand{\\resumeItem}[1]{\n")
 	b.WriteString("  \\item\\small{{#1 \\vspace{-2pt}}}\n")
