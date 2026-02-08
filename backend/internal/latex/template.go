@@ -7,163 +7,253 @@ import (
 )
 
 type RenderLimits struct {
-	MaxSummary     int
-	MaxExperience  int
-	MaxExpBullets  int
-	MaxProjects    int
-	MaxProjBullets int
-	MaxEducation   int
-	MaxSkills      int
+	MaxExperience     int
+	MaxExpBullets     int
+	MaxProjBullets    int
+	MaxEducation      int
+	MaxSkillGroups    int
+	MaxSkillsPerGroup int
+	MaxSkillsFallback int
 }
 
 func RenderResume(spec ai.ResumeSpec) string {
 	limits := RenderLimits{
-		MaxSummary:     3,
-		MaxExperience:  4,
-		MaxExpBullets:  3,
-		MaxProjects:    3,
-		MaxProjBullets: 3,
-		MaxEducation:   2,
-		MaxSkills:      14,
+		MaxExperience:     5,
+		MaxExpBullets:     4,
+		MaxProjBullets:    4,
+		MaxEducation:      2,
+		MaxSkillGroups:    6,
+		MaxSkillsPerGroup: 20,
+		MaxSkillsFallback: 24,
 	}
 
 	name := escapeLatex(fallback(spec.Name, "Candidate"))
-	title := escapeLatex(spec.Title)
-	contact := joinAndEscape(spec.Contact, " \\textbullet{} ")
-	summary := clampAndEscape(spec.Summary, limits.MaxSummary)
-
-	experience := clampExperience(spec.Experience, limits.MaxExperience, limits.MaxExpBullets)
-	projects := clampProjects(spec.Projects, limits.MaxProjects, limits.MaxProjBullets)
+	contact := joinAndEscape(spec.Contact, " \\quad ")
 	education := clampEducation(spec.Education, limits.MaxEducation)
-	skills := clampAndEscape(spec.Skills, limits.MaxSkills)
+	experience := clampExperience(spec.Experience, limits.MaxExperience, limits.MaxExpBullets)
+	projects := clampProjects(spec.Projects, limits.MaxProjBullets)
+	skillGroups := clampSkillGroups(spec.SkillGroups, limits.MaxSkillGroups, limits.MaxSkillsPerGroup)
+	skillsFallback := clampAndEscape(spec.Skills, limits.MaxSkillsFallback)
+	sections := sectionLabels(spec.Language)
 
 	var b strings.Builder
-	b.WriteString("\\documentclass[10pt]{article}\n")
-	b.WriteString("\\usepackage[margin=0.6in]{geometry}\n")
-	b.WriteString("\\usepackage[T1]{fontenc}\n")
-	b.WriteString("\\usepackage[utf8]{inputenc}\n")
+	b.WriteString("\\documentclass[letterpaper,11pt]{article}\n\n")
+	b.WriteString("\\usepackage{latexsym}\n")
+	b.WriteString("\\usepackage[empty]{fullpage}\n")
+	b.WriteString("\\usepackage{titlesec}\n")
+	b.WriteString("\\usepackage{marvosym}\n")
+	b.WriteString("\\usepackage[usenames,dvipsnames]{color}\n")
+	b.WriteString("\\usepackage{verbatim}\n")
 	b.WriteString("\\usepackage{enumitem}\n")
 	b.WriteString("\\usepackage[hidelinks]{hyperref}\n")
-	b.WriteString("\\usepackage{titlesec}\n")
-	b.WriteString("\\setlength{\\parindent}{0pt}\n")
-	b.WriteString("\\setlist[itemize]{noitemsep, topsep=2pt, leftmargin=*}\n")
-	b.WriteString("\\titleformat{\\section}{\\bfseries\\small}{}{0pt}{}\n")
-	b.WriteString("\\pagenumbering{gobble}\n")
-	b.WriteString("\\begin{document}\n")
+	b.WriteString("\\usepackage{fancyhdr}\n")
+	b.WriteString("\\usepackage[english]{babel}\n")
+	b.WriteString("\\usepackage{tabularx}\n")
+	b.WriteString("\\input{glyphtounicode}\n")
+	b.WriteString("\\usepackage[default]{lato}\n\n")
+
+	b.WriteString("\\pagestyle{fancy}\n")
+	b.WriteString("\\fancyhf{}\n")
+	b.WriteString("\\fancyfoot{}\n")
+	b.WriteString("\\renewcommand{\\headrulewidth}{0pt}\n")
+	b.WriteString("\\renewcommand{\\footrulewidth}{0pt}\n\n")
+	b.WriteString("\\addtolength{\\oddsidemargin}{-0.5in}\n")
+	b.WriteString("\\addtolength{\\evensidemargin}{-0.5in}\n")
+	b.WriteString("\\addtolength{\\textwidth}{1in}\n")
+	b.WriteString("\\addtolength{\\topmargin}{-.5in}\n")
+	b.WriteString("\\addtolength{\\textheight}{1.0in}\n\n")
+	b.WriteString("\\urlstyle{same}\n")
+	b.WriteString("\\raggedbottom\n")
+	b.WriteString("\\raggedright\n")
+	b.WriteString("\\setlength{\\tabcolsep}{0in}\n\n")
+	b.WriteString("\\titleformat{\\section}{\n")
+	b.WriteString("  \\vspace{-4pt}\\scshape\\raggedright\\large\n")
+	b.WriteString("}{}{0em}{}[\\color{black}\\titlerule\\vspace{-5pt}]\n")
+	b.WriteString("\\pdfgentounicode=1\n\n")
+
+	b.WriteString("\\newcommand{\\resumeItem}[1]{\n")
+	b.WriteString("  \\item\\small{{#1 \\vspace{-2pt}}}\n")
+	b.WriteString("}\n\n")
+	b.WriteString("\\newcommand{\\resumeSubheading}[4]{\n")
+	b.WriteString("  \\vspace{-2pt}\\item\n")
+	b.WriteString("    \\begin{tabular*}{0.97\\textwidth}[t]{l@{\\extracolsep{\\fill}}r}\n")
+	b.WriteString("      \\textbf{#1} & #2 \\\\\n")
+	b.WriteString("      \\textit{\\small#3} & \\textit{\\small #4} \\\\\n")
+	b.WriteString("    \\end{tabular*}\\vspace{-7pt}\n")
+	b.WriteString("}\n\n")
+	b.WriteString("\\newcommand{\\resumeProjectHeading}[2]{\n")
+	b.WriteString("    \\item\n")
+	b.WriteString("    \\begin{tabular*}{0.97\\textwidth}{l@{\\extracolsep{\\fill}}r}\n")
+	b.WriteString("      \\small#1 & #2 \\\\\n")
+	b.WriteString("    \\end{tabular*}\\vspace{-7pt}\n")
+	b.WriteString("}\n\n")
+	b.WriteString("\\newcommand{\\resumeSubHeadingListStart}{\\begin{itemize}[leftmargin=0.15in, label={}]}\n")
+	b.WriteString("\\newcommand{\\resumeSubHeadingListEnd}{\\end{itemize}}\n")
+	b.WriteString("\\newcommand{\\resumeItemListStart}{\\begin{itemize}}\n")
+	b.WriteString("\\newcommand{\\resumeItemListEnd}{\\end{itemize}\\vspace{-5pt}}\n\n")
+
+	b.WriteString("\\begin{document}\n\n")
 	b.WriteString("\\begin{center}\n")
-	b.WriteString("{\\LARGE \\textbf{")
+	b.WriteString("    \\textbf{\\Huge \\scshape ")
 	b.WriteString(name)
-	b.WriteString("}}\\\\\n")
-	if title != "" {
-		b.WriteString("{\\small ")
-		b.WriteString(title)
-		b.WriteString("}\\\\\n")
-	}
+	b.WriteString("} \\\\\\vspace{1pt}\n")
 	if contact != "" {
-		b.WriteString("{\\small ")
+		b.WriteString("    \\small ")
 		b.WriteString(contact)
-		b.WriteString("}\\\\\n")
+		b.WriteString("\n")
 	}
-	b.WriteString("\\end{center}\n")
-
-	if len(summary) > 0 {
-		section(&b, "Summary")
-		bulletList(&b, summary)
-	}
-
-	if len(experience) > 0 {
-		section(&b, "Experience")
-		for _, exp := range experience {
-			entryHeader(&b, exp.Role, exp.Company, exp.Location, exp.Dates)
-			bulletList(&b, exp.Bullets)
-		}
-	}
-
-	if len(projects) > 0 {
-		section(&b, "Projects")
-		for _, proj := range projects {
-			projectHeader(&b, proj.Name, proj.Stack, proj.Dates)
-			bulletList(&b, proj.Bullets)
-		}
-	}
+	b.WriteString("\\end{center}\n\n")
 
 	if len(education) > 0 {
-		section(&b, "Education")
+		b.WriteString("\\section{")
+		b.WriteString(escapeLatex(sections.Education))
+		b.WriteString("}\n")
+		b.WriteString("\\resumeSubHeadingListStart\n")
 		for _, edu := range education {
-			entryHeader(&b, edu.Degree, edu.School, edu.Location, edu.Dates)
+			b.WriteString("    \\resumeSubheading\n")
+			b.WriteString("      {")
+			b.WriteString(edu.Degree)
+			b.WriteString("}{")
+			b.WriteString(edu.Dates)
+			b.WriteString("}\n")
+			b.WriteString("      {")
+			b.WriteString(edu.School)
+			b.WriteString("}{")
+			b.WriteString(edu.Location)
+			b.WriteString("}\n")
 			if len(edu.Details) > 0 {
-				bulletList(&b, edu.Details)
+				b.WriteString("      \\resumeItemListStart\n")
+				for _, detail := range edu.Details {
+					b.WriteString("        \\resumeItem{")
+					b.WriteString(detail)
+					b.WriteString("}\n")
+				}
+				b.WriteString("      \\resumeItemListEnd\n")
 			}
+			b.WriteString("\n")
 		}
+		b.WriteString("\\resumeSubHeadingListEnd\n\n")
 	}
 
-	if len(skills) > 0 {
-		section(&b, "Skills")
-		b.WriteString("\\small ")
-		for idx, skill := range skills {
-			if idx > 0 {
-				b.WriteString(", ")
+	if len(skillGroups) > 0 || len(skillsFallback) > 0 {
+		b.WriteString("\\section{")
+		b.WriteString(escapeLatex(sections.Skills))
+		b.WriteString("}\n")
+		b.WriteString("    \\begin{itemize}[leftmargin=0.15in, label={}]\n")
+		b.WriteString("        \\small{\\item{\n")
+		if len(skillGroups) > 0 {
+			for i, group := range skillGroups {
+				if i > 0 {
+					b.WriteString(" \\\\\n")
+				}
+				b.WriteString("            \\textbf{")
+				b.WriteString(group.Name)
+				b.WriteString("}{: ")
+				b.WriteString(strings.Join(group.Items, ", "))
+				b.WriteString("}")
 			}
-			b.WriteString("\\textbf{")
-			b.WriteString(skill)
+		} else {
+			b.WriteString("            \\textbf{Skills}{: ")
+			b.WriteString(strings.Join(skillsFallback, ", "))
 			b.WriteString("}")
 		}
 		b.WriteString("\n")
+		b.WriteString("        }}\n")
+		b.WriteString("    \\end{itemize}\n\n")
+	}
+
+	if len(projects) > 0 {
+		b.WriteString("\\section{")
+		b.WriteString(escapeLatex(sections.Projects))
+		b.WriteString("}\n")
+		b.WriteString("\\resumeSubHeadingListStart\n")
+		for _, proj := range projects {
+			b.WriteString("    \\resumeProjectHeading\n")
+			b.WriteString("      {\\textbf{")
+			b.WriteString(proj.Name)
+			if proj.Stack != "" {
+				b.WriteString("} $|$ \\emph{")
+				b.WriteString(proj.Stack)
+			}
+			b.WriteString("}}{")
+			b.WriteString(proj.Dates)
+			b.WriteString("}\n")
+			if len(proj.Bullets) > 0 {
+				b.WriteString("      \\resumeItemListStart\n")
+				for _, bullet := range proj.Bullets {
+					b.WriteString("        \\resumeItem{")
+					b.WriteString(bullet)
+					b.WriteString("}\n")
+				}
+				b.WriteString("      \\resumeItemListEnd\n")
+			}
+			b.WriteString("\n")
+		}
+		b.WriteString("\\resumeSubHeadingListEnd\n\n")
+	}
+
+	if len(experience) > 0 {
+		b.WriteString("\\section{")
+		b.WriteString(escapeLatex(sections.Experience))
+		b.WriteString("}\n")
+		b.WriteString("\\resumeSubHeadingListStart\n")
+		for _, exp := range experience {
+			b.WriteString("    \\resumeSubheading\n")
+			b.WriteString("      {")
+			b.WriteString(exp.Company)
+			b.WriteString("}{")
+			b.WriteString(exp.Location)
+			b.WriteString("}\n")
+			b.WriteString("      {")
+			b.WriteString(exp.Role)
+			b.WriteString("}{")
+			b.WriteString(exp.Dates)
+			b.WriteString("}\n")
+			if len(exp.Bullets) > 0 {
+				b.WriteString("      \\resumeItemListStart\n")
+				for _, bullet := range exp.Bullets {
+					b.WriteString("        \\resumeItem{")
+					b.WriteString(bullet)
+					b.WriteString("}\n")
+				}
+				b.WriteString("      \\resumeItemListEnd\n")
+			}
+			b.WriteString("\n")
+		}
+		b.WriteString("\\resumeSubHeadingListEnd\n\n")
 	}
 
 	b.WriteString("\\end{document}\n")
 	return b.String()
 }
 
-func section(b *strings.Builder, title string) {
-	b.WriteString("\\section{")
-	b.WriteString(title)
-	b.WriteString("}\n")
+type sectionSet struct {
+	Education  string
+	Skills     string
+	Projects   string
+	Experience string
 }
 
-func entryHeader(b *strings.Builder, title, org, location, dates string) {
-	line := strings.TrimSpace(strings.Join([]string{title, org}, " - "))
-	b.WriteString("\\textbf{")
-	b.WriteString(escapeLatex(line))
-	b.WriteString("}")
-	if dates != "" {
-		b.WriteString(" \\hfill ")
-		b.WriteString(escapeLatex(dates))
+func sectionLabels(language string) sectionSet {
+	if isFrenchLanguage(language) {
+		return sectionSet{
+			Education:  "Formation",
+			Skills:     "Connaissances techniques",
+			Projects:   "Projets",
+			Experience: "Experience de travail",
+		}
 	}
-	b.WriteString("\\\\\n")
-	if location != "" {
-		b.WriteString("{\\small ")
-		b.WriteString(escapeLatex(location))
-		b.WriteString("}\\\\\n")
+	return sectionSet{
+		Education:  "Education",
+		Skills:     "Technical Skills",
+		Projects:   "Projects",
+		Experience: "Professional Experience",
 	}
 }
 
-func projectHeader(b *strings.Builder, name, stack, dates string) {
-	label := escapeLatex(name)
-	if stack != "" {
-		label = label + " \\textbar{} " + escapeLatex(stack)
-	}
-	b.WriteString("\\textbf{")
-	b.WriteString(label)
-	b.WriteString("}")
-	if dates != "" {
-		b.WriteString(" \\hfill ")
-		b.WriteString(escapeLatex(dates))
-	}
-	b.WriteString("\\\\\n")
-}
-
-func bulletList(b *strings.Builder, items []string) {
-	if len(items) == 0 {
-		return
-	}
-	b.WriteString("\\begin{itemize}\n")
-	for _, item := range items {
-		b.WriteString("\\item ")
-		b.WriteString(item)
-		b.WriteString("\n")
-	}
-	b.WriteString("\\end{itemize}\n")
+func isFrenchLanguage(language string) bool {
+	lang := strings.ToLower(strings.TrimSpace(language))
+	return strings.HasPrefix(lang, "fr")
 }
 
 func clampAndEscape(items []string, max int) []string {
@@ -202,12 +292,9 @@ func clampExperience(items []ai.ResumeExperience, maxEntries, maxBullets int) []
 	return out
 }
 
-func clampProjects(items []ai.ResumeProject, maxEntries, maxBullets int) []ai.ResumeProject {
-	out := make([]ai.ResumeProject, 0, maxEntries)
+func clampProjects(items []ai.ResumeProject, maxBullets int) []ai.ResumeProject {
+	out := make([]ai.ResumeProject, 0, len(items))
 	for _, item := range items {
-		if len(out) >= maxEntries {
-			break
-		}
 		proj := ai.ResumeProject{
 			Name:    escapeLatex(item.Name),
 			Stack:   escapeLatex(item.Stack),
@@ -239,6 +326,28 @@ func clampEducation(items []ai.ResumeEducation, maxEntries int) []ai.ResumeEduca
 			continue
 		}
 		out = append(out, edu)
+	}
+	return out
+}
+
+func clampSkillGroups(items []ai.ResumeSkillGroup, maxGroups, maxSkills int) []ai.ResumeSkillGroup {
+	out := make([]ai.ResumeSkillGroup, 0, maxGroups)
+	for _, item := range items {
+		if len(out) >= maxGroups {
+			break
+		}
+		name := escapeLatex(item.Name)
+		if name == "" {
+			continue
+		}
+		group := ai.ResumeSkillGroup{
+			Name:  name,
+			Items: clampAndEscape(item.Items, maxSkills),
+		}
+		if len(group.Items) == 0 {
+			continue
+		}
+		out = append(out, group)
 	}
 	return out
 }

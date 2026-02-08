@@ -23,14 +23,21 @@ type ChangePlan struct {
 }
 
 type ResumeSpec struct {
-	Name       string             `json:"name"`
-	Title      string             `json:"title"`
-	Contact    []string           `json:"contact"`
-	Summary    []string           `json:"summary"`
-	Experience []ResumeExperience `json:"experience"`
-	Projects   []ResumeProject    `json:"projects"`
-	Education  []ResumeEducation  `json:"education"`
-	Skills     []string           `json:"skills"`
+	Name        string             `json:"name"`
+	Title       string             `json:"title"`
+	Language    string             `json:"language"`
+	Contact     []string           `json:"contact"`
+	Summary     []string           `json:"summary"`
+	Experience  []ResumeExperience `json:"experience"`
+	Projects    []ResumeProject    `json:"projects"`
+	Education   []ResumeEducation  `json:"education"`
+	SkillGroups []ResumeSkillGroup `json:"skill_groups"`
+	Skills      []string           `json:"skills"`
+}
+
+type ResumeSkillGroup struct {
+	Name  string   `json:"name"`
+	Items []string `json:"items"`
 }
 
 type ResumeExperience struct {
@@ -278,14 +285,18 @@ func buildResumeSpecPrompt(resumeText, jobText string, bm25Signals any) string {
 	var b strings.Builder
 	b.WriteString("Return ONLY JSON. No LaTeX. No commentary. Use ASCII text only.\n")
 	b.WriteString("Create a one-page resume spec tailored to the job.\n")
+	b.WriteString("Style target: Jake's resume look, similar to the provided candidate template.\n")
+	b.WriteString("Section order MUST be: Education, Skills, Projects, Experience.\n")
+	b.WriteString("Use the resume's primary language for ALL section content.\n")
+	b.WriteString("Do NOT switch language to match the job posting language.\n")
 	b.WriteString("Constraints:\n")
-	b.WriteString("- Summary: 2-3 bullets\n")
-	b.WriteString("- Experience: up to 4 roles, 2-4 bullets each\n")
-	b.WriteString("- Projects: up to 3 projects, 2-3 bullets each\n")
+	b.WriteString("- Experience: up to 5 roles, 2-4 bullets each\n")
+	b.WriteString("- Projects: include EVERY project from the resume that is relevant to the job, 1-4 bullets each\n")
 	b.WriteString("- Education: up to 2 entries\n")
-	b.WriteString("- Skills: 8-16 items\n")
+	b.WriteString("- Skills: group skills into categories (for example: Languages, Technologies, Concepts)\n")
 	b.WriteString("Keep bullets short (<= 18 words). Use action verbs.\n")
-	b.WriteString("Use the resume content as the source. Do not invent companies or degrees.\n\n")
+	b.WriteString("Use the resume content as the source. Do not invent companies, projects, degrees, dates, or achievements.\n")
+	b.WriteString("If space is tight, shorten bullets instead of dropping relevant projects.\n\n")
 
 	b.WriteString("RESUME:\n")
 	b.WriteString(resumeText)
@@ -310,8 +321,24 @@ func buildResumeSpecPrompt(resumeText, jobText string, bm25Signals any) string {
 	b.WriteString(`{
   "name": "",
   "title": "",
+  "language": "",
   "contact": ["email", "phone", "linkedin", "github", "website"],
-  "summary": ["", ""],
+  "summary": [],
+  "education": [
+    {
+      "school": "",
+      "degree": "",
+      "location": "",
+      "dates": "",
+      "details": [""]
+    }
+  ],
+  "skill_groups": [
+    {
+      "name": "",
+      "items": ["", ""]
+    }
+  ],
   "experience": [
     {
       "company": "",
@@ -329,16 +356,7 @@ func buildResumeSpecPrompt(resumeText, jobText string, bm25Signals any) string {
       "bullets": ["", ""]
     }
   ],
-  "education": [
-    {
-      "school": "",
-      "degree": "",
-      "location": "",
-      "dates": "",
-      "details": [""]
-    }
-  ],
-  "skills": ["", ""]
+  "skills": []
 }`)
 	return b.String()
 }

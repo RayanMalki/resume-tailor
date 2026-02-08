@@ -13,3 +13,11 @@ backend/.env
 backend/web/.env.local
 backend/cookies.txt
 cookies.txt
+template/resume.tex
+template/src/education.tex
+template/src/ExperiencePro.tex
+template/src/heading.tex
+template/src/projects.tex
+template/src/skills.tex
+/template
+backend/README.md
