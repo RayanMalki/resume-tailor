@@ -277,11 +277,13 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		if w.pdfEnabled && !pdfExists {
 			pdfBytes, err := latex.CompilePDF(ctx, w.tectonicBin, latexDoc)
 			if err != nil {
-				return fmt.Errorf("failed to compile resume pdf: %w", err)
-			}
-			encoded := base64.StdEncoding.EncodeToString(pdfBytes)
-			if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeResumePDF, encoded); err != nil {
-				return fmt.Errorf("failed to store resume pdf: %w", err)
+				// PDF generation is best-effort; keep run successful if LaTeX is ready.
+				slog.Warn("failed to compile resume pdf; continuing without pdf artifact", "run_id", runID, "error", err)
+			} else {
+				encoded := base64.StdEncoding.EncodeToString(pdfBytes)
+				if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeResumePDF, encoded); err != nil {
+					return fmt.Errorf("failed to store resume pdf: %w", err)
+				}
 			}
 		}
 	}
