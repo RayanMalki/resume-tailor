@@ -260,7 +260,6 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 			ts, err := bm25.Compute(tailoredText, jobText)
 			if err != nil {
 				slog.Warn("BM25 computation on tailored resume failed", "error", err, "run_id", runID)
-				// Fall back to original signals
 				if bm25Signals != nil {
 					tailoredSignals = *bm25Signals
 				}
@@ -279,31 +278,56 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 			atsScore = overlapCount / (overlapCount + missingCount)
 		}
 
-		// Detect resume language from spec (or default to "French")
-		resumeLang := "French"
-		if specGenerated && spec.Language != "" {
-			resumeLang = spec.Language
+		// Build change plan PROGRAMMATICALLY by comparing original vs tailored BM25.
+		// This is 100% accurate — no AI hallucination possible.
+		originalOverlap := make(map[string]bool)
+		if bm25Signals != nil {
+			for _, t := range bm25Signals.OverlapTerms {
+				originalOverlap[t] = true
+			}
 		}
-
-		// Collect term names for the lean AI prompt
-		overlapNames := tailoredSignals.OverlapTerms
+		// Keywords that moved from missing → matched = real additions
+		var addedKeywords []string
+		for _, t := range tailoredSignals.OverlapTerms {
+			if !originalOverlap[t] {
+				addedKeywords = append(addedKeywords, t)
+			}
+		}
+		// Keywords still missing
 		missingNames := make([]string, 0, len(tailoredSignals.MissingJobTerms))
 		for _, t := range tailoredSignals.MissingJobTerms {
 			missingNames = append(missingNames, t.Term)
 		}
 
-		// Generate the qualitative report (summary + notes + changes) via a lean AI call
-		tailoredText := ""
-		if specGenerated {
-			tailoredText = ai.ResumeSpecToText(spec)
+		// Detect resume language
+		resumeLang := "French"
+		if specGenerated && spec.Language != "" {
+			resumeLang = spec.Language
 		}
-		atsReport, changePlan, err := w.aiClient.GenerateRunReport(ctx, resumeText, tailoredText, overlapNames, missingNames, resumeLang)
+
+		// Generate summary + notes from AI (no change plan — that's computed above)
+		atsReport, _, err := w.aiClient.GenerateRunReport(ctx, addedKeywords, missingNames, resumeLang)
 		if err != nil {
 			return fmt.Errorf("failed to generate run report: %w", err)
 		}
 
-		// Set the score from BM25 (not from AI)
+		// Set score from BM25
 		atsReport.Score = atsScore
+
+		// Build change plan programmatically from BM25 diff (100% accurate, no AI lies)
+		var changes []string
+		if len(addedKeywords) > 0 {
+			changes = append(changes, fmt.Sprintf("Mots-clés ajoutés au CV : %s", strings.Join(addedKeywords, ", ")))
+		}
+		if len(missingNames) > 0 && len(missingNames) <= 10 {
+			changes = append(changes, fmt.Sprintf("Mots-clés toujours manquants : %s", strings.Join(missingNames, ", ")))
+		} else if len(missingNames) > 10 {
+			changes = append(changes, fmt.Sprintf("Mots-clés toujours manquants : %s, et %d autres", strings.Join(missingNames[:10], ", "), len(missingNames)-10))
+		}
+		if len(addedKeywords) == 0 {
+			changes = append(changes, "Le CV original était déjà bien adapté au poste — aucun mot-clé significatif n'a été ajouté.")
+		}
+		changePlan := ai.ChangePlan{Changes: changes}
 
 		payload := reportPayload{
 			ReportVersion: 1,

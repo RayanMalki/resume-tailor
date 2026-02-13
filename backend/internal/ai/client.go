@@ -75,13 +75,32 @@ type ResumeEducation struct {
 }
 
 // ResumeSpecToText converts a ResumeSpec to plain text for BM25 analysis.
+// Includes section headers (Formation, Expérience, etc.) so they can match job keywords.
 func ResumeSpecToText(spec ResumeSpec) string {
 	var b strings.Builder
 	b.WriteString(spec.Name + "\n")
 	b.WriteString(spec.Title + "\n")
+
+	// Contact info (contains github, linkedin, email, etc.)
+	for _, c := range spec.Contact {
+		b.WriteString(c + "\n")
+	}
+
 	for _, s := range spec.Summary {
 		b.WriteString(s + "\n")
 	}
+
+	// Section header "Formation" / "Education"
+	b.WriteString("Formation Education\n")
+	for _, ed := range spec.Education {
+		b.WriteString(ed.School + " " + ed.Degree + " " + ed.Location + "\n")
+		for _, d := range ed.Details {
+			b.WriteString(d + "\n")
+		}
+	}
+
+	// Section header "Compétences" / "Skills"
+	b.WriteString("Connaissances techniques Skills\n")
 	for _, sg := range spec.SkillGroups {
 		b.WriteString(sg.Name + ": " + strings.Join(sg.Items, ", ") + "\n")
 	}
@@ -89,24 +108,25 @@ func ResumeSpecToText(spec ResumeSpec) string {
 		b.WriteString(s + " ")
 	}
 	b.WriteString("\n")
-	for _, e := range spec.Experience {
-		b.WriteString(e.Company + " " + e.Role + "\n")
-		for _, bullet := range e.Bullets {
-			b.WriteString(bullet + "\n")
-		}
-	}
+
+	// Section header "Projets" / "Projects"
+	b.WriteString("Projets Projects\n")
 	for _, p := range spec.Projects {
 		b.WriteString(p.Name + " " + p.Stack + "\n")
 		for _, bullet := range p.Bullets {
 			b.WriteString(bullet + "\n")
 		}
 	}
-	for _, ed := range spec.Education {
-		b.WriteString(ed.School + " " + ed.Degree + "\n")
-		for _, d := range ed.Details {
-			b.WriteString(d + "\n")
+
+	// Section header "Expérience" / "Experience"
+	b.WriteString("Expérience de travail Experience\n")
+	for _, e := range spec.Experience {
+		b.WriteString(e.Company + " " + e.Role + " " + e.Location + "\n")
+		for _, bullet := range e.Bullets {
+			b.WriteString(bullet + "\n")
 		}
 	}
+
 	return b.String()
 }
 
@@ -136,22 +156,23 @@ func NewClientFromEnv(apiKey, model string) (*Client, error) {
 	}, nil
 }
 
-// GenerateRunReport generates a lightweight ATS summary and change plan using OpenAI.
-// The ATS score is computed from BM25 (passed in), NOT by the AI.
-// overlapTerms and missingTerms are passed as concise keyword lists for context.
-func (c *Client) GenerateRunReport(ctx context.Context, resumeText, tailoredText string, overlapTerms []string, missingTerms []string, resumeLang string) (ATSReport, ChangePlan, error) {
-	prompt := buildReportPrompt(resumeText, tailoredText, overlapTerms, missingTerms, resumeLang)
+// GenerateRunReport generates a short ATS summary and notes using OpenAI.
+// It does NOT generate a change plan — that's computed programmatically from BM25 diffs.
+// addedKeywords = terms that moved from missing to matched (real changes).
+// missingTerms = terms still missing from the tailored resume.
+func (c *Client) GenerateRunReport(ctx context.Context, addedKeywords []string, missingTerms []string, resumeLang string) (ATSReport, ChangePlan, error) {
+	prompt := buildReportPrompt(addedKeywords, missingTerms, resumeLang)
 
 	req := openai.ChatCompletionNewParams{
 		Model: c.model,
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.SystemMessage(
-				"You compare an original resume with its tailored version and produce a concise JSON report. " +
+				"You write short ATS compatibility summaries. " +
 					"You MUST write ALL output in the language specified. No exceptions."),
 			openai.UserMessage(prompt),
 		},
 		Temperature:         openai.Float(0.3),
-		MaxCompletionTokens: openai.Int(800),
+		MaxCompletionTokens: openai.Int(500),
 		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
 			OfJSONObject: func() *shared.ResponseFormatJSONObjectParam {
 				p := shared.NewResponseFormatJSONObjectParam()
@@ -182,28 +203,29 @@ func (c *Client) GenerateRunReport(ctx context.Context, resumeText, tailoredText
 	return reportResp.ATSReport, reportResp.ChangePlan, nil
 }
 
-func buildReportPrompt(resumeText, tailoredText string, overlapTerms, missingTerms []string, lang string) string {
+func buildReportPrompt(addedKeywords, missingTerms []string, lang string) string {
 	var b strings.Builder
 
-	b.WriteString("Compare the ORIGINAL and TAILORED resumes below. Produce a JSON report.\n\n")
+	b.WriteString("LANGUAGE: Write ALL text in " + lang + ". Every string MUST be in " + lang + ".\n\n")
 
-	b.WriteString("LANGUAGE: Write ALL text in " + lang + ". Every string in the JSON must be in " + lang + ".\n\n")
+	b.WriteString("Based on the keyword analysis below, write a short ATS summary.\n\n")
+
+	if len(addedKeywords) > 0 {
+		b.WriteString("KEYWORDS ADDED by tailoring: " + strings.Join(addedKeywords, ", ") + "\n")
+	} else {
+		b.WriteString("KEYWORDS ADDED by tailoring: none (resume was already well-matched)\n")
+	}
+	if len(missingTerms) > 0 {
+		b.WriteString("KEYWORDS STILL MISSING: " + strings.Join(missingTerms, ", ") + "\n\n")
+	} else {
+		b.WriteString("KEYWORDS STILL MISSING: none\n\n")
+	}
 
 	b.WriteString("RULES:\n")
-	b.WriteString("- 'summary': 2-3 sentences describing what ACTUALLY changed (compare the two texts). Be honest — if little changed, say so.\n")
-	b.WriteString("- 'notes': 2-4 short observations about ATS compatibility of the TAILORED resume.\n")
-	b.WriteString("- 'changes': list ONLY changes that ACTUALLY exist between original and tailored. Do NOT invent changes.\n\n")
-
-	b.WriteString("MATCHED KEYWORDS: " + strings.Join(overlapTerms, ", ") + "\n")
-	b.WriteString("MISSING KEYWORDS: " + strings.Join(missingTerms, ", ") + "\n\n")
-
-	b.WriteString("ORIGINAL RESUME:\n")
-	b.WriteString(resumeText)
-	b.WriteString("\n\n")
-
-	b.WriteString("TAILORED RESUME:\n")
-	b.WriteString(tailoredText)
-	b.WriteString("\n\n")
+	b.WriteString("- 'summary': 2-3 sentences. If no keywords were added, say the resume was already well-suited and explain what's still missing.\n")
+	b.WriteString("- 'notes': 2-3 short observations about ATS compatibility.\n")
+	b.WriteString("- Do NOT describe formatting changes, reorganization, or title changes unless keywords tell you so.\n")
+	b.WriteString("- Be factual. Only mention what the keyword data shows.\n\n")
 
 	b.WriteString("Respond with JSON:\n")
 	b.WriteString(`{
@@ -212,7 +234,7 @@ func buildReportPrompt(resumeText, tailoredText string, overlapTerms, missingTer
     "summary": "<string>"
   },
   "change_plan": {
-    "changes": ["<string>", ...]
+    "changes": []
   }
 }`)
 

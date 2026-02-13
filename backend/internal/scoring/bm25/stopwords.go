@@ -39,7 +39,7 @@ func isStopword(token string) bool {
 // even if they appear in the ISO lists. Space-separated.
 const protectedTerms = `api apis sql nosql css html http https tcp udp grpc json xml yaml csv pdf
 rest restful graphql oauth saml sso jwt
-react angular vue svelte nextjs nodejs express jquery redux
+react angular svelte nextjs nodejs express jquery redux
 docker kubernetes helm istio terraform ansible
 aws gcp azure lambda ec2 s3 vpc iam
 postgresql postgres mysql mongodb redis elasticsearch cassandra dynamodb firebase sqlite oracle
@@ -220,7 +220,8 @@ career challenge challenging deliver delivering description different
 ensure ensuring everyone effort efforts expect expected
 information involve involved responsible responsibility
 thrive inspire inspiring confirm
-act acting enable enabling various
+act acting enable enabling various continue continued continuing
+maximum application applications
 
 poste entreprise equipe recherche recherchons responsabilites competences requises
 souhaitees profil candidat postuler salaire avantages environnement annees niveau
@@ -231,6 +232,7 @@ motive carriere emploi stage stagiaire connaissances connaissance apprentissage
 apprendre contenu contenus personnalises personnalise favoriser enrichir disponibles
 disponible possedant differentes expertises expertise experiences profils diversifies
 points vue titre positif organisation grace permettent permet maitriser metier mode
+qualite qualites
 bases atout comprehension prerequis prealables secteur activite curiosite fort esprit
 rigueur travail completement connexe etudes relever defis supporter croissance
 confirmer livrables integrer inspirante respecte meilleures pratiques innovantes
