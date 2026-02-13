@@ -346,7 +346,7 @@ export default function DashboardPage() {
                   <svg viewBox="0 0 240 80" className="h-24 w-full" role="img" aria-label="ATS score trend chart">
                     <polyline
                       fill="none"
-                      stroke="#ff7a1a"
+                      stroke="#60a5fa"
                       strokeWidth="3"
                       points={chartPath}
                     />
@@ -355,7 +355,7 @@ export default function DashboardPage() {
                       const x = (index / maxX) * 240;
                       const y = 80 - (point.score / 100) * 80;
                       return (
-                        <circle key={point.runId} cx={x} cy={y} r="3" fill="#ffb57f" />
+                        <circle key={point.runId} cx={x} cy={y} r="3" fill="#bfdbfe" />
                       );
                     })}
                   </svg>

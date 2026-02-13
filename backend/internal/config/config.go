@@ -3,33 +3,36 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	DatabaseURL    string
-	HTTPAddr       string
-	WorkerID       string
-	OpenAIAPIKey   string
-	OpenAIModel    string
-	FrontendOrigin string
-	PDFEnabled     bool
-	TectonicBin    string
+	DatabaseURL      string
+	HTTPAddr         string
+	WorkerID         string
+	WorkerJobTimeout time.Duration
+	OpenAIAPIKey     string
+	OpenAIModel      string
+	FrontendOrigin   string
+	PDFEnabled       bool
+	TectonicBin      string
 }
 
 func Load() (Config, error) {
 	_ = godotenv.Load()
 
 	cfg := Config{
-		DatabaseURL:    os.Getenv("DATABASE_URL"),
-		HTTPAddr:       os.Getenv("HTTP_ADDR"),
-		WorkerID:       os.Getenv("WORKER_ID"),
-		OpenAIAPIKey:   os.Getenv("OPENAI_API_KEY"),
-		OpenAIModel:    os.Getenv("OPENAI_MODEL"),
-		FrontendOrigin: os.Getenv("FRONTEND_ORIGIN"),
-		PDFEnabled:     os.Getenv("RESUME_PDF_ENABLED") == "1",
-		TectonicBin:    os.Getenv("TECTONIC_BIN"),
+		DatabaseURL:      os.Getenv("DATABASE_URL"),
+		HTTPAddr:         os.Getenv("HTTP_ADDR"),
+		WorkerID:         os.Getenv("WORKER_ID"),
+		WorkerJobTimeout: 15 * time.Minute,
+		OpenAIAPIKey:     os.Getenv("OPENAI_API_KEY"),
+		OpenAIModel:      os.Getenv("OPENAI_MODEL"),
+		FrontendOrigin:   os.Getenv("FRONTEND_ORIGIN"),
+		PDFEnabled:       os.Getenv("RESUME_PDF_ENABLED") == "1",
+		TectonicBin:      os.Getenv("TECTONIC_BIN"),
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -46,6 +49,16 @@ func Load() (Config, error) {
 
 	if cfg.WorkerID == "" {
 		cfg.WorkerID = "worker-1"
+	}
+	if raw := os.Getenv("WORKER_JOB_TIMEOUT"); raw != "" {
+		dur, err := time.ParseDuration(raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid WORKER_JOB_TIMEOUT %q: %w", raw, err)
+		}
+		if dur <= 0 {
+			return Config{}, fmt.Errorf("WORKER_JOB_TIMEOUT must be > 0")
+		}
+		cfg.WorkerJobTimeout = dur
 	}
 
 	if cfg.OpenAIModel == "" {

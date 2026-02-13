@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -21,7 +22,11 @@ import (
 )
 
 const pollInterval = 1 * time.Second
-const jobTimeout = 5 * time.Minute
+
+const (
+	defaultJobTimeout = 15 * time.Minute
+	finalizeTimeout   = 15 * time.Second
+)
 
 const (
 	runStatusQueued    = "queued"
@@ -56,9 +61,13 @@ type Worker struct {
 	artifacts   *artifacts.Service
 	pdfEnabled  bool
 	tectonicBin string
+	jobTimeout  time.Duration
 }
 
-func NewWorker(jobsRepo *Repo, db *pgxpool.Pool, workerID string, reportsSvc *runreports.Service, runsRepo RunsRepo, resumesRepo *resumes.Repo, aiClient *ai.Client, artifactsSvc *artifacts.Service, pdfEnabled bool, tectonicBin string) *Worker {
+func NewWorker(jobsRepo *Repo, db *pgxpool.Pool, workerID string, reportsSvc *runreports.Service, runsRepo RunsRepo, resumesRepo *resumes.Repo, aiClient *ai.Client, artifactsSvc *artifacts.Service, pdfEnabled bool, tectonicBin string, jobTimeout time.Duration) *Worker {
+	if jobTimeout <= 0 {
+		jobTimeout = defaultJobTimeout
+	}
 	return &Worker{
 		jobsRepo:    jobsRepo,
 		db:          db,
@@ -70,6 +79,7 @@ func NewWorker(jobsRepo *Repo, db *pgxpool.Pool, workerID string, reportsSvc *ru
 		artifacts:   artifactsSvc,
 		pdfEnabled:  pdfEnabled,
 		tectonicBin: tectonicBin,
+		jobTimeout:  jobTimeout,
 	}
 }
 
@@ -107,14 +117,16 @@ func (w *Worker) processNextJob(ctx context.Context) error {
 
 	// Enforce a timeout on the entire job so a hung LLM call or PDF compile
 	// cannot block the worker forever.
-	jobCtx, cancel := context.WithTimeout(ctx, jobTimeout)
+	jobCtx, cancel := context.WithTimeout(ctx, w.jobTimeout)
 	defer cancel()
 
 	// Update run status to running
 	if err := w.updateRunStatus(jobCtx, job.RunID, runStatusRunning, nil); err != nil {
 		slog.Error("failed to update run status to running", "error", err, "run_id", job.RunID)
 		// Mark job as failed
-		w.jobsRepo.MarkJobFailed(jobCtx, job.ID, fmt.Sprintf("failed to update run status: %v", err), job.Attempts < job.MaxAttempts)
+		finalizeCtx, finalizeCancel := context.WithTimeout(context.Background(), finalizeTimeout)
+		defer finalizeCancel()
+		w.jobsRepo.MarkJobFailed(finalizeCtx, job.ID, fmt.Sprintf("failed to update run status: %v", err), job.Attempts < job.MaxAttempts)
 		return err
 	}
 
@@ -122,29 +134,34 @@ func (w *Worker) processNextJob(ctx context.Context) error {
 	if err := w.processRun(jobCtx, job.RunID); err != nil {
 		slog.Error("failed to process run", "error", err, "run_id", job.RunID)
 		errorMsg := safeErrorMessage(err)
+		finalizeCtx, finalizeCancel := context.WithTimeout(context.Background(), finalizeTimeout)
+		defer finalizeCancel()
 
 		// Update run status to failed
-		if err := w.updateRunStatus(jobCtx, job.RunID, runStatusFailed, &errorMsg); err != nil {
+		if err := w.updateRunStatus(finalizeCtx, job.RunID, runStatusFailed, &errorMsg); err != nil {
 			slog.Error("failed to update run status to failed", "error", err, "run_id", job.RunID)
 		}
 
 		// Update job status
 		requeue := job.Attempts < job.MaxAttempts
-		if err := w.jobsRepo.MarkJobFailed(jobCtx, job.ID, errorMsg, requeue); err != nil {
+		if err := w.jobsRepo.MarkJobFailed(finalizeCtx, job.ID, errorMsg, requeue); err != nil {
 			slog.Error("failed to mark job as failed", "error", err, "job_id", job.ID)
 		}
 		return err
 	}
 
+	finalizeCtx, finalizeCancel := context.WithTimeout(context.Background(), finalizeTimeout)
+	defer finalizeCancel()
+
 	// Success: update run status to succeeded
-	if err := w.updateRunStatus(jobCtx, job.RunID, runStatusSucceeded, nil); err != nil {
+	if err := w.updateRunStatus(finalizeCtx, job.RunID, runStatusSucceeded, nil); err != nil {
 		slog.Error("failed to update run status to succeeded", "error", err, "run_id", job.RunID)
-		w.jobsRepo.MarkJobFailed(jobCtx, job.ID, fmt.Sprintf("failed to update run status: %v", err), false)
+		w.jobsRepo.MarkJobFailed(finalizeCtx, job.ID, fmt.Sprintf("failed to update run status: %v", err), false)
 		return err
 	}
 
 	// Mark job as done
-	if err := w.jobsRepo.MarkJobDone(jobCtx, job.ID); err != nil {
+	if err := w.jobsRepo.MarkJobDone(finalizeCtx, job.ID); err != nil {
 		slog.Error("failed to mark job as done", "error", err, "job_id", job.ID)
 		return err
 	}
@@ -403,6 +420,12 @@ type reportPayload struct {
 func safeErrorMessage(err error) string {
 	if err == nil {
 		return ""
+	}
+	if errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "context deadline exceeded") {
+		return "processing_timed_out"
+	}
+	if errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "context canceled") {
+		return "processing_canceled"
 	}
 	msg := err.Error()
 	switch {
