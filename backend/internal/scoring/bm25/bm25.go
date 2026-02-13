@@ -7,6 +7,7 @@ import (
 	"unicode"
 
 	libbm25 "github.com/crawlab-team/bm25"
+	"golang.org/x/text/unicode/norm"
 )
 
 const (
@@ -112,10 +113,31 @@ func Compute(resumeText, jobText string) (Signals, error) {
 	}, nil
 }
 
+// stripAccents removes diacritics/accents from text using Unicode NFD
+// decomposition (e.g. "développement" → "developpement", "résumé" → "resume").
+// This allows French and other accented text to match English IDF table terms.
+func stripAccents(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range norm.NFD.String(s) {
+		// After NFD decomposition, accents become separate combining marks.
+		// Keep only non-combining characters (base letters/digits).
+		if unicode.Is(unicode.Mn, r) { // Mn = Mark, Nonspacing (combining accents)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
 func tokenize(text string) []string {
 	if text == "" {
 		return nil
 	}
+
+	// Normalize accented characters before tokenizing so that e.g. "développement"
+	// and "developpement" produce the same token.
+	text = stripAccents(text)
 
 	var tokens []string
 	var b strings.Builder
@@ -206,6 +228,34 @@ var stopwords = map[string]struct{}{
 	"working": {}, "well": {}, "environment": {}, "opportunity": {}, "join": {},
 	"ideal": {}, "candidate": {}, "applicant": {}, "apply": {}, "equal": {},
 	"employer": {}, "benefits": {}, "salary": {}, "competitive": {},
+
+	// ── French stopwords ──────────────────────────────────────────────
+	// Common French function words that add noise to BM25 signals.
+	// Note: accented forms are stripped by tokenizer, so "é"→"e", "à"→"a", etc.
+	"le": {}, "la": {}, "les": {}, "un": {}, "une": {}, "des": {}, "du": {},
+	"de": {}, "et": {}, "en": {}, "au": {}, "aux": {}, "ce": {}, "ces": {},
+	"est": {}, "sont": {}, "ete": {}, "ont": {}, "sur": {}, "par": {},
+	"pour": {}, "pas": {}, "que": {}, "qui": {}, "dans": {}, "avec": {},
+	"tout": {}, "tous": {}, "toute": {}, "toutes": {}, "mais": {}, "ou": {},
+	"ses": {}, "son": {}, "sa": {}, "nos": {}, "notre": {}, "vos": {}, "votre": {},
+	"leur": {}, "leurs": {}, "ils": {}, "elles": {}, "nous": {}, "vous": {},
+	"mon": {}, "ma": {}, "mes": {}, "ton": {}, "ta": {}, "tes": {},
+	"ne": {}, "se": {}, "si": {}, "ya": {}, "ca": {}, "cet": {}, "cette": {},
+	"ici": {}, "entre": {}, "comme": {}, "plus": {}, "moins": {}, "tres": {},
+	"bien": {}, "aussi": {}, "meme": {}, "autre": {}, "autres": {},
+	"peut": {}, "fait": {}, "faire": {}, "etre": {}, "avoir": {},
+	"sera": {}, "seront": {}, "etait": {}, "etaient": {},
+	"chez": {}, "dont": {}, "depuis": {}, "vers": {}, "sans": {},
+	"alors": {}, "donc": {}, "encore": {}, "deja": {}, "apres": {},
+	"avant": {}, "sous": {},
+
+	// French job-posting boilerplate (accent-stripped)
+	// Note: "candidate" and "experience" already defined in English section.
+	"poste": {}, "entreprise": {}, "equipe": {}, "recherche": {}, "recherchons": {},
+	"responsabilites": {}, "competences": {}, "requises": {}, "souhaitees": {},
+	"profil": {}, "candidat": {}, "postuler": {},
+	"salaire": {}, "avantages": {}, "environnement": {},
+	"annees": {}, "niveau": {},
 }
 
 func isStopword(token string) bool {

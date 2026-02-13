@@ -7,28 +7,24 @@ import { useToast } from "../../components/Toast";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 
-type ProjectMode = "pinned" | "auto" | "exclude";
-
-type ProjectControl = {
-  name: string;
-  mode: ProjectMode;
+type TermScore = {
+  term: string;
+  score: number;
 };
 
-type LLMProjectReason = {
-  name: string;
-  reason: string;
-};
-
-type ProjectOutcome = {
-  name: string;
-  mode: ProjectMode;
-  reason: string;
+type BM25Signals = {
+  top_job_terms: TermScore[];
+  missing_job_terms: TermScore[];
+  overlap_terms: string[];
+  score: number;
 };
 
 type ATSReport = {
   score: number;
   notes: string[];
   change_plan: string[];
+  summary: string;
+  bm25_signals: BM25Signals | null;
 };
 
 type Tab = "preview" | "report" | "latex";
@@ -125,10 +121,9 @@ export default function ResultPage() {
   // Core data
   const [latex, setLatex] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState(10);
+  const [progress, setProgress] = useState(5);
+  const [progressStage, setProgressStage] = useState("Queued");
   const [resumeId, setResumeId] = useState<string | null>(null);
-  const [projectControls, setProjectControls] = useState<ProjectControl[]>([]);
-  const [projectReasons, setProjectReasons] = useState<LLMProjectReason[]>([]);
 
   // PDF state
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -157,31 +152,24 @@ export default function ResultPage() {
 
   const loadingMessage = useMemo(() => {
     if (latex) return "Ready";
-    return "Generating your tailored resume\u2026";
-  }, [latex]);
+    return progressStage;
+  }, [latex, progressStage]);
 
-  const projectOutcomes = useMemo<ProjectOutcome[]>(() => {
-    if (projectReasons.length === 0) return [];
-    const modeByName = new Map<string, ProjectMode>();
-    for (const control of projectControls) {
-      modeByName.set(control.name.toLowerCase(), control.mode);
-    }
-    return projectReasons
-      .filter((item) => item.name.trim().length > 0 && item.reason.trim().length > 0)
-      .map((item) => ({
-        name: item.name,
-        mode: modeByName.get(item.name.toLowerCase()) || "auto",
-        reason: item.reason,
-      }));
-  }, [projectControls, projectReasons]);
+  // Target progress ref — set by polling, animated smoothly toward by the interval
+  const targetProgressRef = useRef(5);
 
-  /* ── Progress bar animation ─────────────────────────────────── */
+  /* ── Smooth progress animation — ticks toward the target set by polling ── */
   useEffect(() => {
     let timer: NodeJS.Timeout | undefined;
     if (!latex) {
       timer = setInterval(() => {
-        setProgress((prev) => (prev >= 90 ? prev : prev + 5));
-      }, 500);
+        setProgress((prev) => {
+          const target = targetProgressRef.current;
+          if (prev >= target) return prev;
+          // Move 1-3% toward the target each tick for a smooth feel
+          return Math.min(target, prev + Math.max(1, Math.floor((target - prev) / 4)));
+        });
+      }, 300);
     }
     return () => {
       if (timer) clearInterval(timer);
@@ -235,10 +223,34 @@ export default function ResultPage() {
         if (!raw) return null;
         const obj = typeof raw === "string" ? JSON.parse(raw) : raw;
         if (!obj || typeof obj !== "object") return null;
+
+        // The DB stores a reportPayload wrapper: { ats_report, bm25_signals, change_plan, ... }
+        // Navigate into the nested ats_report for AI-generated score/notes.
+        const inner = obj.ats_report ?? obj;
+        const changePlanRaw = obj.change_plan;
+        const changes: string[] = Array.isArray(changePlanRaw)
+          ? changePlanRaw
+          : Array.isArray(changePlanRaw?.changes)
+            ? changePlanRaw.changes
+            : [];
+
+        // Extract BM25 signals
+        const bm25Raw = obj.bm25_signals;
+        const bm25: BM25Signals | null = bm25Raw && typeof bm25Raw === "object"
+          ? {
+              top_job_terms: Array.isArray(bm25Raw.top_job_terms) ? bm25Raw.top_job_terms : [],
+              missing_job_terms: Array.isArray(bm25Raw.missing_job_terms) ? bm25Raw.missing_job_terms : [],
+              overlap_terms: Array.isArray(bm25Raw.overlap_terms) ? bm25Raw.overlap_terms : [],
+              score: typeof bm25Raw.score === "number" ? bm25Raw.score : 0,
+            }
+          : null;
+
         return {
-          score: typeof obj.score === "number" ? obj.score : 0,
-          notes: Array.isArray(obj.notes) ? obj.notes : [],
-          change_plan: Array.isArray(obj.change_plan) ? obj.change_plan : [],
+          score: typeof inner.score === "number" ? inner.score : 0,
+          notes: Array.isArray(inner.notes) ? inner.notes : [],
+          change_plan: changes,
+          summary: typeof inner.summary === "string" ? inner.summary : "",
+          bm25_signals: bm25,
         };
       })();
       if (parsed) setAtsReport(parsed);
@@ -263,26 +275,6 @@ export default function ResultPage() {
       if (raw) setResumeId((prev) => prev || raw);
     };
 
-    const extractProjectControls = (data: Record<string, unknown>) => {
-      const raw = data.projectControls || data.ProjectControls || data.project_controls;
-      if (!Array.isArray(raw)) return;
-      const parsed: ProjectControl[] = raw
-        .map((entry) => {
-          if (!entry || typeof entry !== "object") return null;
-          const obj = entry as Record<string, unknown>;
-          const name = typeof obj.name === "string" ? obj.name.trim() : "";
-          const modeRaw = typeof obj.mode === "string" ? obj.mode.trim().toLowerCase() : "auto";
-          const mode: ProjectMode =
-            modeRaw === "pinned" || modeRaw === "exclude" || modeRaw === "auto"
-              ? (modeRaw as ProjectMode)
-              : "auto";
-          if (!name) return null;
-          return { name, mode };
-        })
-        .filter((entry): entry is ProjectControl => Boolean(entry));
-      setProjectControls(parsed);
-    };
-
     const fetchRunMeta = async () => {
       try {
         const runRes = await fetch(`${API_BASE_URL}/v1/runs/${runId}`, {
@@ -295,11 +287,15 @@ export default function ResultPage() {
         if (runRes.ok) {
           const runData = await runRes.json();
           extractResumeId(runData);
-          extractProjectControls(runData);
         }
       } catch {
         // ignore metadata failures
       }
+    };
+
+    const updateProgress = (pct: number, stage: string) => {
+      targetProgressRef.current = pct;
+      setProgressStage(stage);
     };
 
     const poll = async () => {
@@ -310,6 +306,7 @@ export default function ResultPage() {
       }
 
       try {
+        // 1. Check for LaTeX artifact (final deliverable)
         const res = await fetch(`${API_BASE_URL}/v1/runs/${runId}/artifacts/resume-latex`, {
           credentials: "include",
         });
@@ -322,25 +319,48 @@ export default function ResultPage() {
         if (res.ok) {
           const data = await res.json();
           setLatex(data.latex);
+          targetProgressRef.current = 100;
           setProgress(100);
+          setProgressStage("Ready");
           pollErrorCountRef.current = 0;
           return;
         }
 
         if (res.status === 404) {
+          // LaTeX not ready yet — check run status and intermediate artifacts
           const runRes = await fetch(`${API_BASE_URL}/v1/runs/${runId}`, {
             credentials: "include",
           });
           if (runRes.ok) {
             const runData = await runRes.json();
             extractResumeId(runData);
-            extractProjectControls(runData);
+
             if (runData.status === "failed") {
               setError(runData.errorMessage || "Run failed");
               return;
             }
+
+            // Derive progress from run status
+            const status = runData.status || runData.Status;
+            if (status === "queued") {
+              updateProgress(10, "Queued \u2014 waiting for worker\u2026");
+            } else if (status === "running") {
+              // Check if report exists (indicates BM25 + ATS report are done)
+              try {
+                const reportRes = await fetch(`${API_BASE_URL}/v1/runs/${runId}/report`, {
+                  credentials: "include",
+                });
+                if (reportRes.ok) {
+                  updateProgress(65, "Generating tailored resume\u2026");
+                } else {
+                  updateProgress(30, "Analyzing keywords & generating ATS report\u2026");
+                }
+              } catch {
+                updateProgress(25, "Processing\u2026");
+              }
+            }
           }
-          // Schedule next poll with backoff
+
           scheduleNextPoll();
           return;
         }
@@ -383,54 +403,6 @@ export default function ResultPage() {
     fetchPDF();
     fetchReport();
   }, [latex, fetchPDF, fetchReport]);
-
-  /* ── Project reasons polling (with backoff) ─────────────────── */
-  useEffect(() => {
-    if (!latex) return;
-
-    let canceled = false;
-    let interval = 1500;
-    let timer: NodeJS.Timeout;
-
-    const fetchReasons = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/v1/runs/${runId}/artifacts/project-reasons`, {
-          credentials: "include",
-        });
-        if (res.status === 401) { router.push("/login"); return; }
-        if (!res.ok) {
-          interval = Math.min(interval * 2, 10000);
-          if (!canceled) timer = setTimeout(fetchReasons, interval);
-          return;
-        }
-        const data = (await res.json()) as { projects?: Array<{ name?: string; reason?: string }> };
-        const parsed = (data.projects || [])
-          .map((item) => ({
-            name: (item.name || "").trim(),
-            reason: (item.reason || "").trim(),
-          }))
-          .filter((item) => item.name.length > 0 && item.reason.length > 0);
-
-        if (!canceled) setProjectReasons(parsed);
-        if (parsed.length === 0 && !canceled) {
-          interval = Math.min(interval * 2, 10000);
-          timer = setTimeout(fetchReasons, interval);
-        }
-      } catch {
-        if (!canceled) {
-          interval = Math.min(interval * 2, 10000);
-          timer = setTimeout(fetchReasons, interval);
-        }
-      }
-    };
-
-    fetchReasons();
-
-    return () => {
-      canceled = true;
-      clearTimeout(timer);
-    };
-  }, [latex, runId, router]);
 
   /* ── Actions ────────────────────────────────────────────────── */
   const handleCopy = async () => {
@@ -526,6 +498,7 @@ export default function ResultPage() {
                   style={{ width: `${progress}%` }}
                 />
               </div>
+              <p className="mt-2 text-xs text-slate-500">{progressStage}</p>
               {error ? (
                 <div className="mt-4">
                   <p className="text-sm text-rose-300">{error}</p>
@@ -626,6 +599,16 @@ export default function ResultPage() {
                       </div>
                     </div>
 
+                    {/* Change Summary */}
+                    {atsReport.summary && (
+                      <div className="rounded-xl border border-white/10 bg-ink-900/50 p-4">
+                        <h4 className="text-sm font-semibold text-slate-200">What changed</h4>
+                        <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                          {atsReport.summary}
+                        </p>
+                      </div>
+                    )}
+
                     {/* Notes */}
                     {atsReport.notes.length > 0 && (
                       <div>
@@ -655,6 +638,79 @@ export default function ResultPage() {
                         </ul>
                       </div>
                     )}
+
+                    {/* BM25 Keyword Signals */}
+                    {atsReport.bm25_signals && (
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-200">Keyword Signals (BM25)</h4>
+                        <p className="mt-1 text-xs text-slate-400">
+                          How well your resume keywords match the job description.
+                        </p>
+
+                        {/* Overlap terms */}
+                        {atsReport.bm25_signals.overlap_terms.length > 0 && (
+                          <div className="mt-3">
+                            <p className="text-xs font-medium text-emerald-300">
+                              Matched keywords ({atsReport.bm25_signals.overlap_terms.length})
+                            </p>
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              {atsReport.bm25_signals.overlap_terms.map((term) => (
+                                <span
+                                  key={term}
+                                  className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs text-emerald-300 border border-emerald-500/20"
+                                >
+                                  {term}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Missing terms */}
+                        {atsReport.bm25_signals.missing_job_terms.length > 0 && (
+                          <div className="mt-3">
+                            <p className="text-xs font-medium text-rose-300">
+                              Missing from resume ({atsReport.bm25_signals.missing_job_terms.length})
+                            </p>
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              {atsReport.bm25_signals.missing_job_terms.slice(0, 15).map((ts) => (
+                                <span
+                                  key={ts.term}
+                                  className="rounded-full bg-rose-500/15 px-2.5 py-1 text-xs text-rose-300 border border-rose-500/20"
+                                >
+                                  {ts.term}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Top job terms with scores */}
+                        {atsReport.bm25_signals.top_job_terms.length > 0 && (
+                          <div className="mt-3">
+                            <p className="text-xs font-medium text-slate-300">Top job terms by importance</p>
+                            <div className="mt-1.5 space-y-1">
+                              {atsReport.bm25_signals.top_job_terms.map((ts) => {
+                                const isMatched = atsReport.bm25_signals!.overlap_terms.includes(ts.term);
+                                return (
+                                  <div key={ts.term} className="flex items-center gap-2">
+                                    <span className={`text-xs w-24 truncate ${isMatched ? "text-emerald-300" : "text-slate-400"}`}>
+                                      {ts.term}
+                                    </span>
+                                    <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
+                                      <div
+                                        className={`h-full rounded-full transition-all ${isMatched ? "bg-emerald-500/60" : "bg-slate-500/40"}`}
+                                        style={{ width: `${Math.min(100, (ts.score / (atsReport.bm25_signals!.top_job_terms[0]?.score || 1)) * 100)}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -671,39 +727,6 @@ export default function ResultPage() {
                 </pre>
               </div>
 
-              {/* ── Project outcomes section ──────────────────── */}
-              {projectOutcomes.length > 0 ? (
-                <div className="mt-6 rounded-2xl border border-white/10 bg-ink-950/60 p-4">
-                  <h2 className="text-sm font-semibold text-slate-200">Project decisions &amp; LLM reasoning</h2>
-                  <p className="mt-1 text-xs text-slate-400">
-                    Tailored explanations for each project based on your resume, job posting, and BM25 signals.
-                  </p>
-                  <div className="mt-3 space-y-2">
-                    {projectOutcomes.map((outcome) => (
-                      <div
-                        key={outcome.name}
-                        className="rounded-lg border border-white/10 bg-ink-900/70 px-3 py-2"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-sm text-slate-100">{outcome.name}</span>
-                          <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-200">
-                            {outcome.mode.toUpperCase()}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs text-slate-300">{outcome.reason}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : projectControls.length > 0 ? (
-                <div className="mt-6 rounded-2xl border border-white/10 bg-ink-950/60 p-4">
-                  <h2 className="text-sm font-semibold text-slate-200">Project decisions &amp; LLM reasoning</h2>
-                  <div className="mt-2 space-y-2">
-                    <SkeletonLine className="h-3 w-2/3" />
-                    <SkeletonLine className="h-3 w-1/2" />
-                  </div>
-                </div>
-              ) : null}
             </>
           )}
         </div>

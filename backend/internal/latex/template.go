@@ -258,13 +258,25 @@ func isFrenchLanguage(language string) bool {
 }
 
 func clampAndEscape(items []string, max int) []string {
+	return clampAndEscapeWith(items, max, false)
+}
+
+func clampAndEscapeBold(items []string, max int) []string {
+	return clampAndEscapeWith(items, max, true)
+}
+
+func clampAndEscapeWith(items []string, max int, preserveBold bool) []string {
 	clean := make([]string, 0, max)
 	for _, item := range items {
 		trimmed := strings.TrimSpace(item)
 		if trimmed == "" {
 			continue
 		}
-		clean = append(clean, escapeLatex(trimmed))
+		if preserveBold {
+			clean = append(clean, escapeLatexWithBold(trimmed))
+		} else {
+			clean = append(clean, escapeLatex(trimmed))
+		}
 		if len(clean) >= max {
 			break
 		}
@@ -283,7 +295,7 @@ func clampExperience(items []ai.ResumeExperience, maxEntries, maxBullets int) []
 			Role:     escapeLatex(item.Role),
 			Location: escapeLatex(item.Location),
 			Dates:    escapeLatex(item.Dates),
-			Bullets:  clampAndEscape(item.Bullets, maxBullets),
+			Bullets:  clampAndEscapeBold(item.Bullets, maxBullets),
 		}
 		if exp.Company == "" && exp.Role == "" {
 			continue
@@ -298,9 +310,9 @@ func clampProjects(items []ai.ResumeProject, maxBullets int) []ai.ResumeProject 
 	for _, item := range items {
 		proj := ai.ResumeProject{
 			Name:    escapeLatex(item.Name),
-			Stack:   escapeLatex(item.Stack),
+			Stack:   escapeLatexWithBold(item.Stack),
 			Dates:   escapeLatex(item.Dates),
-			Bullets: clampAndEscape(item.Bullets, maxBullets),
+			Bullets: clampAndEscapeBold(item.Bullets, maxBullets),
 		}
 		if proj.Name == "" {
 			continue
@@ -343,7 +355,7 @@ func clampSkillGroups(items []ai.ResumeSkillGroup, maxGroups, maxSkills int) []a
 		}
 		group := ai.ResumeSkillGroup{
 			Name:  name,
-			Items: clampAndEscape(item.Items, maxSkills),
+			Items: clampAndEscapeBold(item.Items, maxSkills),
 		}
 		if len(group.Items) == 0 {
 			continue
@@ -366,6 +378,38 @@ func joinAndEscape(items []string, sep string) string {
 }
 
 func escapeLatex(input string) string {
+	return escapeLatexCore(input, false)
+}
+
+// escapeLatexWithBold escapes LaTeX special characters while converting
+// markdown **bold** markers to \textbf{...}. This handles AI output that
+// uses **Go**, **Docker** etc. instead of LaTeX bold commands.
+func escapeLatexWithBold(input string) string {
+	return escapeLatexCore(input, true)
+}
+
+func escapeLatexCore(input string, preserveBold bool) string {
+	if !preserveBold || !strings.Contains(input, "**") {
+		return escapeLatexRaw(input)
+	}
+
+	// Split on ** markers. Odd-indexed parts are between ** ** (bold content).
+	parts := strings.Split(input, "**")
+	var b strings.Builder
+	for i, part := range parts {
+		escaped := escapeLatexRaw(part)
+		if i%2 == 1 && strings.TrimSpace(escaped) != "" {
+			b.WriteString("\\textbf{")
+			b.WriteString(escaped)
+			b.WriteString("}")
+		} else {
+			b.WriteString(escaped)
+		}
+	}
+	return b.String()
+}
+
+func escapeLatexRaw(input string) string {
 	replacer := strings.NewReplacer(
 		"\\", "\\textbackslash{}",
 		"&", "\\&",

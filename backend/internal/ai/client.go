@@ -13,8 +13,9 @@ import (
 
 // ATSReport represents the ATS scoring report
 type ATSReport struct {
-	Score float64  `json:"score"`
-	Notes []string `json:"notes"`
+	Score   float64  `json:"score"`
+	Notes   []string `json:"notes"`
+	Summary string   `json:"summary"`
 }
 
 // ChangePlan represents the recommended changes
@@ -160,7 +161,14 @@ func (c *Client) buildPrompt(resumeText, jobText string, bm25Signals any) string
 	b.WriteString("Analyze the following resume against the job description and provide:\n")
 	b.WriteString("1. An ATS compatibility score (0.0 to 1.0)\n")
 	b.WriteString("2. Notes explaining the score\n")
-	b.WriteString("3. A change plan with specific recommendations\n\n")
+	b.WriteString("3. A change plan with specific recommendations\n")
+	b.WriteString("4. A human-readable summary (2-4 sentences) explaining what was changed in the tailored resume and why\n\n")
+
+	b.WriteString("IMPORTANT LANGUAGE RULE:\n")
+	b.WriteString("Detect the primary language of the RESUME. Write the 'summary' field in that SAME language.\n")
+	b.WriteString("For example, if the resume is in French, write the summary in French.\n")
+	b.WriteString("If the resume is in English, write the summary in English.\n")
+	b.WriteString("The 'notes' and 'changes' fields should always be in English.\n\n")
 
 	b.WriteString("RESUME:\n")
 	b.WriteString(resumeText)
@@ -187,11 +195,18 @@ func (c *Client) buildPrompt(resumeText, jobText string, bm25Signals any) string
 	}
 
 	b.WriteString("Use the BM25 signals to ground your analysis — missing terms should directly inform the change plan.\n\n")
+
+	b.WriteString("The 'summary' should describe:\n")
+	b.WriteString("- What key changes were made to tailor the resume (rephrased bullets, added keywords, reordered sections, etc.)\n")
+	b.WriteString("- Why those changes improve ATS compatibility for this specific role\n")
+	b.WriteString("- If the resume was already very well suited, say so and explain what minor tweaks were made\n\n")
+
 	b.WriteString("Respond with a JSON object in this exact format:\n")
 	b.WriteString(`{
   "ats_report": {
     "score": <number between 0.0 and 1.0>,
-    "notes": ["<string>", ...]
+    "notes": ["<string>", ...],
+    "summary": "<string — 2 to 4 sentences in the RESUME's language>"
   },
   "change_plan": {
     "changes": ["<string>", ...]
