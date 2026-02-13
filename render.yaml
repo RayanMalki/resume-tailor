@@ -12,7 +12,7 @@ services:
           name: resume-tailor-db
           property: connectionString
       - key: FRONTEND_ORIGIN
-        value: "https://resume-tailor-web.onrender.com"
+        value: "https://resumetailor.live"
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL
