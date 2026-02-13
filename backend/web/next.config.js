@@ -15,6 +15,18 @@ const nextConfig = {
         destination: "https://resumetailor.live/:path*",
         permanent: true, // 301 redirect — tells search engines the move is permanent
       },
+      {
+        // Redirect www to non-www for consistency
+        source: "/:path*",
+        has: [
+          {
+            type: "host",
+            value: "www.resumetailor.live",
+          },
+        ],
+        destination: "https://resumetailor.live/:path*",
+        permanent: true,
+      },
     ];
   },
 };
