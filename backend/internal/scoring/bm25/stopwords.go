@@ -44,6 +44,7 @@ docker kubernetes helm istio terraform ansible
 aws gcp azure lambda ec2 s3 vpc iam
 postgresql postgres mysql mongodb redis elasticsearch cassandra dynamodb firebase sqlite oracle
 python java javascript typescript golang rust ruby swift kotlin scala php perl
+csharp cpp dotnet aspnet fsharp
 git github gitlab bitbucket jenkins circleci
 kafka spark hadoop airflow etl
 tensorflow pytorch scikit pandas numpy

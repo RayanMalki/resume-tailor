@@ -1,5 +1,10 @@
 package bm25
 
+import (
+	"strings"
+	"unicode"
+)
+
 // idfTable provides pre-computed IDF values derived from a large corpus of
 // ~50,000 English-language job descriptions and general text documents.
 //
@@ -8,17 +13,21 @@ package bm25
 // Terms that appear in almost every document get low IDF (~0.0), terms that
 // appear rarely get high IDF (~10+). This table covers common technical and
 // professional vocabulary. Terms not found in the table receive a default IDF
-// of 7.0, treating them as relatively rare and therefore important.
+// of 5.0, treating them as moderately rare but avoiding over-weighting noise.
 //
 // This replaces the broken single-document IDF calculation where totalDocs=1
 // made every present/absent term score identically.
 
 const (
 	// defaultCorpusIDF is assigned to terms not found in the static table.
-	// A value of 7.0 treats unknown terms as moderately rare — high enough
+	// A value of 5.0 treats unknown terms as moderately rare — high enough
 	// to surface them as potentially important keywords but not so high that
 	// typos dominate the results.
-	defaultCorpusIDF = 7.0
+	defaultCorpusIDF = 5.0
+	// shortUnknownIDF is used for short unknown acronyms/tokens.
+	shortUnknownIDF = 4.2
+	// noisyUnknownIDF downweights likely OCR/typo garbage tokens.
+	noisyUnknownIDF = 2.5
 )
 
 // corpusIDF maps lowercase terms to their IDF values. Built from analysis of
@@ -30,6 +39,9 @@ var corpusIDF = map[string]float64{
 	"java":       4.0,
 	"javascript": 4.3,
 	"typescript": 5.1,
+	"csharp":     4.6,
+	"cpp":        4.6,
+	"fsharp":     6.3,
 	"golang":     6.5,
 	"rust":       6.8,
 	"ruby":       5.5,
@@ -67,6 +79,8 @@ var corpusIDF = map[string]float64{
 	"babel":     5.8,
 	"jquery":    5.0,
 	"nodejs":    4.8,
+	"dotnet":    4.8,
+	"aspnet":    5.0,
 	"redux":     5.2,
 	"graphql":   5.5,
 	"rest":      3.8,
@@ -545,5 +559,56 @@ func lookupIDF(term string) float64 {
 			return v
 		}
 	}
+	if isLikelyNoisyToken(term) {
+		return noisyUnknownIDF
+	}
+	if len(term) <= 3 {
+		return shortUnknownIDF
+	}
 	return defaultCorpusIDF
+}
+
+func isLikelyNoisyToken(term string) bool {
+	if len(term) > 24 {
+		return true
+	}
+
+	letters := 0
+	digits := 0
+	vowels := 0
+	repeatRun := 1
+	var prev rune
+
+	for i, r := range term {
+		if unicode.IsLetter(r) {
+			letters++
+			if strings.ContainsRune("aeiouy", r) {
+				vowels++
+			}
+		}
+		if unicode.IsDigit(r) {
+			digits++
+		}
+		if i > 0 {
+			if r == prev {
+				repeatRun++
+				if repeatRun >= 4 {
+					return true
+				}
+			} else {
+				repeatRun = 1
+			}
+		}
+		prev = r
+	}
+
+	total := letters + digits
+	if letters > 0 && digits > 0 && digits*2 >= total {
+		return true
+	}
+	if letters >= 10 && vowels == 0 {
+		return true
+	}
+
+	return false
 }

@@ -270,13 +270,8 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 			tailoredSignals = *bm25Signals
 		}
 
-		// Compute ATS score from BM25: overlap / (overlap + missing)
-		overlapCount := float64(len(tailoredSignals.OverlapTerms))
-		missingCount := float64(len(tailoredSignals.MissingJobTerms))
-		atsScore := 0.0
-		if overlapCount+missingCount > 0 {
-			atsScore = overlapCount / (overlapCount + missingCount)
-		}
+		// Compute ATS score from IDF-weighted keyword coverage.
+		atsScore := tailoredSignals.Score
 
 		// Build change plan PROGRAMMATICALLY by comparing original vs tailored BM25.
 		// This is 100% accurate — no AI hallucination possible.
@@ -311,7 +306,7 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 			return fmt.Errorf("failed to generate run report: %w", err)
 		}
 
-		// Set score from BM25
+		// Set score from IDF-weighted BM25 keyword coverage.
 		atsReport.Score = atsScore
 
 		// Build change plan programmatically from BM25 diff (100% accurate, no AI lies)

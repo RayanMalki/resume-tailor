@@ -109,7 +109,90 @@ func TestLookupIDFKnownTerm(t *testing.T) {
 
 func TestLookupIDFUnknownTerm(t *testing.T) {
 	val := lookupIDF("xyzzy_nonexistent_term_12345")
+	if val != noisyUnknownIDF {
+		t.Fatalf("expected noisy unknown IDF %f, got %f", noisyUnknownIDF, val)
+	}
+}
+
+func TestWeightedCoveragePrioritizesImportantTerms(t *testing.T) {
+	resume := "api api api"
+	job := "api kubernetes"
+
+	got, err := Compute(resume, job)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// api IDF(2.5) vs kubernetes IDF(4.5) => coverage should be about 2.5/7.0
+	if got.Score >= 0.5 {
+		t.Fatalf("expected weighted coverage below 0.5, got %.4f", got.Score)
+	}
+	if got.Score <= 0.3 {
+		t.Fatalf("expected weighted coverage above 0.3, got %.4f", got.Score)
+	}
+}
+
+func TestTopJobTermsIncludeMissingImportantKeywords(t *testing.T) {
+	resume := "python engineer"
+	job := "python kubernetes"
+
+	got, err := Compute(resume, job)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(got.TopJobTerms) < 2 {
+		t.Fatalf("expected two top job terms, got %+v", got.TopJobTerms)
+	}
+
+	// kubernetes should outrank python by static IDF (4.5 > 4.2),
+	// even though it's missing from resume.
+	if got.TopJobTerms[0].Term != "kubernetes" {
+		t.Fatalf("expected top term kubernetes, got %+v", got.TopJobTerms)
+	}
+	if got.MissingJobTerms[0].Term != "kubernetes" {
+		t.Fatalf("expected missing term kubernetes, got %+v", got.MissingJobTerms)
+	}
+}
+
+func TestTokenizeTechPunctuationVariants(t *testing.T) {
+	resume := "Built APIs in C# and C++ on .NET with Node.js"
+	job := "csharp cpp dotnet nodejs"
+
+	got, err := Compute(resume, job)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(got.MissingJobTerms) != 0 {
+		t.Fatalf("expected no missing tech terms, got %+v", got.MissingJobTerms)
+	}
+}
+
+func TestAmazonIsNotForcedToAWS(t *testing.T) {
+	resume := "Improved delivery operations at Amazon"
+	job := "aws"
+
+	got, err := Compute(resume, job)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(got.MissingJobTerms) == 0 || got.MissingJobTerms[0].Term != "aws" {
+		t.Fatalf("expected aws to remain missing when only amazon is present, got %+v", got.MissingJobTerms)
+	}
+}
+
+func TestLookupIDFShortUnknownAcronym(t *testing.T) {
+	val := lookupIDF("gke")
+	if val != shortUnknownIDF {
+		t.Fatalf("expected short unknown IDF %f, got %f", shortUnknownIDF, val)
+	}
+}
+
+func TestLookupIDFDefaultUnknownWord(t *testing.T) {
+	val := lookupIDF("platformization")
 	if val != defaultCorpusIDF {
-		t.Fatalf("expected default IDF %f for unknown term, got %f", defaultCorpusIDF, val)
+		t.Fatalf("expected default unknown IDF %f, got %f", defaultCorpusIDF, val)
 	}
 }

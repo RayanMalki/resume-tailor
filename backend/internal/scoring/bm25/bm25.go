@@ -28,7 +28,12 @@ type Signals struct {
 	TopJobTerms     []TermScore `json:"top_job_terms"`
 	MissingJobTerms []TermScore `json:"missing_job_terms"`
 	OverlapTerms    []string    `json:"overlap_terms"`
-	Score           float64     `json:"score"`
+	// Score is IDF-weighted keyword coverage in [0,1]:
+	// matched job-term weight / total job-term weight.
+	Score float64 `json:"score"`
+	// BM25Score is the raw 2-document BM25 score (resume scored against job query).
+	// It is exposed for diagnostics only and is not used as ATS compatibility score.
+	BM25Score float64 `json:"bm25_score"`
 }
 
 // Compute calculates BM25 signals for resume and job text matching.
@@ -61,9 +66,9 @@ func Compute(resumeText, jobText string) (Signals, error) {
 	}
 
 	// The resume is document 0 in the corpus.
-	overallScore := 0.0
+	bm25Score := 0.0
 	if len(scores) > 0 {
-		overallScore = scores[0]
+		bm25Score = scores[0]
 	}
 
 	jobFreq := termFreq(jobTokens)
@@ -72,28 +77,30 @@ func Compute(resumeText, jobText string) (Signals, error) {
 	overlapTerms := make([]string, 0)
 	missingTerms := make([]TermScore, 0)
 	topTerms := make([]TermScore, 0, len(jobFreq))
-
-	avgDocLen := float64(len(resumeTokens))
-	docLen := float64(len(resumeTokens))
+	totalWeight := 0.0
+	matchedWeight := 0.0
 
 	for term, qtf := range jobFreq {
 		tf := resumeFreq[term]
 
-		// Use static corpus IDF instead of single-document IDF.
+		// Job-side importance is based on static corpus IDF and query frequency.
 		termIDF := lookupIDF(term)
+		importance := termIDF * float64(qtf)
+		totalWeight += importance
 
 		if tf > 0 {
 			overlapTerms = append(overlapTerms, term)
+			matchedWeight += importance
 		} else {
 			missingTerms = append(missingTerms, TermScore{
 				Term:  term,
-				Score: termIDF * float64(qtf),
+				Score: importance,
 			})
 		}
 
 		topTerms = append(topTerms, TermScore{
 			Term:  term,
-			Score: bm25TermScore(tf, docLen, avgDocLen, termIDF),
+			Score: importance,
 		})
 	}
 
@@ -105,11 +112,17 @@ func Compute(resumeText, jobText string) (Signals, error) {
 		topTerms = topTerms[:defaultTopN]
 	}
 
+	coverageScore := 0.0
+	if totalWeight > 0 {
+		coverageScore = matchedWeight / totalWeight
+	}
+
 	return Signals{
 		TopJobTerms:     topTerms,
 		MissingJobTerms: missingTerms,
 		OverlapTerms:    overlapTerms,
-		Score:           overallScore,
+		Score:           coverageScore,
+		BM25Score:       bm25Score,
 	}, nil
 }
 
@@ -137,9 +150,8 @@ func stripAccents(s string) string {
 	return b.String()
 }
 
-// synonyms maps technology aliases to a canonical form so BM25 treats them as the same token.
-// Both directions must be defined (e.g. "go"→"golang" AND "golang"→"go") — the canonical
-// form is the FIRST entry so both occurrences end up as the same token.
+// synonyms maps safe technology aliases to canonical forms so matching treats
+// equivalent tokens as the same concept.
 var synonyms = map[string]string{
 	// Go / Golang
 	"go":     "golang",
@@ -158,10 +170,13 @@ var synonyms = map[string]string{
 	"kubernetes": "kubernetes",
 	// C# / CSharp
 	"csharp": "csharp",
-	"c#":     "csharp",
+	"dotnet": "dotnet",
+	"aspnet": "aspnet",
+	"cpp":    "cpp",
+	"fsharp": "fsharp",
 	// Continuous Integration / Continuous Deployment
-	"ci":   "cicd",
-	"cd":   "cicd",
+	"ci":   "ci",
+	"cd":   "cd",
 	"cicd": "cicd",
 	// ReactJS / React
 	"reactjs": "react",
@@ -173,15 +188,14 @@ var synonyms = map[string]string{
 	"rest":    "rest",
 	"restful": "rest",
 	// Amazon Web Services
-	"aws":    "aws",
-	"amazon": "aws",
+	"aws": "aws",
 	// Google Cloud Platform
 	"gcp": "gcp",
 	// Infonuagique (French for cloud computing)
 	"infonuagique": "cloud",
 	"cloud":        "cloud",
 	// Agile / Scrum
-	"scrum": "agile",
+	"scrum": "scrum",
 	"agile": "agile",
 	// DevOps
 	"devops": "devops",
@@ -197,12 +211,12 @@ var synonyms = map[string]string{
 	"automatisee":  "automatise",
 	"automatisees": "automatise",
 	// Protect tech terms that naturally end in 's' from depluralization
-	"jenkins":  "jenkins",
-	"redis":    "redis",
-	"travis":   "travis",
-	"atlas":    "atlas",
-	"pandas":   "pandas",
-	"keras":    "keras",
+	"jenkins": "jenkins",
+	"redis":   "redis",
+	"travis":  "travis",
+	"atlas":   "atlas",
+	"pandas":  "pandas",
+	"keras":   "keras",
 	"express": "express",
 	// "postgres" already defined above
 }
@@ -249,9 +263,8 @@ func tokenize(text string) []string {
 		return nil
 	}
 
-	// Normalize accented characters before tokenizing so that e.g. "développement"
-	// and "developpement" produce the same token.
-	text = stripAccents(text)
+	// Normalize accents and punctuation-heavy tech forms before tokenizing.
+	text = normalizeForTokenization(text)
 
 	var tokens []string
 	var b strings.Builder
@@ -279,7 +292,7 @@ func tokenize(text string) []string {
 
 	for _, r := range text {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			b.WriteRune(unicode.ToLower(r))
+			b.WriteRune(r)
 			continue
 		}
 		flush()
@@ -297,13 +310,22 @@ func termFreq(tokens []string) map[string]int {
 	return freq
 }
 
-func bm25TermScore(tf int, docLen, avgDocLen, idfVal float64) float64 {
-	if tf == 0 {
-		return 0
-	}
-	numerator := float64(tf) * (defaultK1 + 1)
-	denominator := float64(tf) + defaultK1*(1-defaultB+defaultB*(docLen/avgDocLen))
-	return idfVal * (numerator / denominator)
+var techTokenReplacer = strings.NewReplacer(
+	"asp.net", " aspnet ",
+	"next.js", " nextjs ",
+	"node.js", " nodejs ",
+	"nuxt.js", " nuxtjs ",
+	"c++", " cpp ",
+	"c#", " csharp ",
+	"f#", " fsharp ",
+	".net", " dotnet ",
+	"ci/cd", " cicd ",
+	"ci-cd", " cicd ",
+)
+
+func normalizeForTokenization(text string) string {
+	text = strings.ToLower(stripAccents(text))
+	return techTokenReplacer.Replace(text)
 }
 
 func sortStrings(values []string) {
