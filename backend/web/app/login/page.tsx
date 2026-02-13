@@ -32,7 +32,7 @@ export default function LoginPage() {
     try {
       const res = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
         credentials: "include",
         body: JSON.stringify(payload)
       });
@@ -53,14 +53,17 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-ink-950 text-slate-100">
       <TopBar />
-      <main className="mx-auto flex w-full max-w-5xl flex-1 items-center justify-center px-6 py-16">
-        <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-ink-900/70 p-8 shadow-panel backdrop-blur">
-          <div className="mb-6 flex gap-2">
+      <main className="mx-auto flex w-full max-w-5xl flex-1 items-center justify-center px-4 py-10 sm:px-6 sm:py-16">
+        <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-ink-900/70 p-6 shadow-panel backdrop-blur sm:p-8">
+          {/* Tab selector */}
+          <div className="mb-6 flex gap-2" role="tablist" aria-label="Authentication mode">
             {(["login", "signup"] as Mode[]).map((tab) => (
               <button
                 key={tab}
+                role="tab"
+                aria-selected={mode === tab}
                 onClick={() => setMode(tab)}
-                className={`flex-1 rounded-full px-4 py-2 text-sm font-medium transition ${
+                className={`flex-1 rounded-full px-4 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
                   mode === tab
                     ? "bg-ember-500 text-ink-950 shadow-glow"
                     : "bg-ink-950 text-slate-300"
@@ -71,12 +74,13 @@ export default function LoginPage() {
             ))}
           </div>
 
+          {/* Google OAuth */}
           <button
             type="button"
             onClick={() => {
               window.location.href = `${API_BASE_URL}/v1/auth/google/start?redirect=/dashboard`;
             }}
-            className="mb-6 flex w-full items-center justify-center gap-3 rounded-full border border-white/10 bg-ink-950 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-ember-400/60 hover:text-ember-200"
+            className="mb-6 flex w-full items-center justify-center gap-3 rounded-full border border-white/10 bg-ink-950 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-ember-400/60 hover:text-ember-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
           >
             <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white text-[11px] font-bold text-ink-950">
               G
@@ -87,44 +91,62 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === "signup" ? (
               <div>
-                <label className="text-sm font-medium text-slate-200">Display name</label>
+                <label htmlFor="displayName" className="text-sm font-medium text-slate-200">
+                  Display name
+                </label>
                 <input
+                  id="displayName"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-white/10 bg-ink-950 px-3 py-2 text-slate-100 placeholder:text-slate-500"
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-ink-950 px-3 py-2.5 text-slate-100 placeholder:text-slate-500 focus:border-ember-500/60 focus:outline-none focus:ring-1 focus:ring-ember-500/40"
                   required
                 />
               </div>
             ) : null}
             <div>
-              <label className="text-sm font-medium text-slate-200">Email</label>
+              <label htmlFor="email" className="text-sm font-medium text-slate-200">
+                Email
+              </label>
               <input
+                id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-white/10 bg-ink-950 px-3 py-2 text-slate-100 placeholder:text-slate-500"
+                className="mt-1 w-full rounded-xl border border-white/10 bg-ink-950 px-3 py-2.5 text-slate-100 placeholder:text-slate-500 focus:border-ember-500/60 focus:outline-none focus:ring-1 focus:ring-ember-500/40"
                 required
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-slate-200">Password</label>
+              <label htmlFor="password" className="text-sm font-medium text-slate-200">
+                Password
+              </label>
               <input
+                id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-white/10 bg-ink-950 px-3 py-2 text-slate-100 placeholder:text-slate-500"
+                className="mt-1 w-full rounded-xl border border-white/10 bg-ink-950 px-3 py-2.5 text-slate-100 placeholder:text-slate-500 focus:border-ember-500/60 focus:outline-none focus:ring-1 focus:ring-ember-500/40"
                 required
               />
             </div>
 
-            {error ? <p className="text-sm text-rose-300">{error}</p> : null}
+            {error ? (
+              <div role="alert" className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2">
+                <p className="text-sm text-rose-300">{error}</p>
+              </div>
+            ) : null}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-full bg-ember-500 px-4 py-2 text-sm font-semibold text-ink-950 shadow-glow transition hover:-translate-y-0.5 hover:bg-ember-400 disabled:opacity-70"
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-ember-500 px-4 py-2.5 text-sm font-semibold text-ink-950 shadow-glow transition hover:-translate-y-0.5 hover:bg-ember-400 disabled:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-900"
             >
-              {loading ? "Please wait..." : mode === "login" ? "Login" : "Create account"}
+              {loading ? (
+                <>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-ink-950/30 border-t-ink-950" />
+                  Please wait&hellip;
+                </>
+              ) : mode === "login" ? "Login" : "Create account"}
             </button>
           </form>
         </div>

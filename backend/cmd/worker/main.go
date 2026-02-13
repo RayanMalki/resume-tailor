@@ -7,11 +7,14 @@ import (
 	"os/signal"
 	"syscall"
 
+	"time"
+
 	"resume-tailor/internal/ai"
 	"resume-tailor/internal/artifacts"
 	"resume-tailor/internal/config"
 	"resume-tailor/internal/db"
 	"resume-tailor/internal/jobs"
+	"resume-tailor/internal/monitoring"
 	"resume-tailor/internal/resumes"
 	"resume-tailor/internal/runreports"
 	"resume-tailor/internal/runs"
@@ -21,6 +24,10 @@ import (
 
 func main() {
 	ctx := context.Background()
+
+	// Initialize monitoring (Sentry when SENTRY_DSN is set).
+	monitoring.Init("resume-tailor-worker")
+	defer monitoring.Flush(2 * time.Second)
 
 	cfg, err := config.Load()
 	if err != nil {

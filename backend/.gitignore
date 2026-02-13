@@ -1,7 +1,24 @@
+# Go binaries
 /api
 /worker
+/bin/
+
+# Env
 .env
+.env.*
+!.env.example
+
+# Node / Next.js
 /web/node_modules
 /web/.next
 /web/.env.local
+/web/.env.*.local
+
+# OS
 .DS_Store
+
+# Credentials
+cookies.txt
+
+# Logs
+*.log

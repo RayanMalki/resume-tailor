@@ -58,6 +58,52 @@ const parseScore = (atsRaw: unknown): number | null => {
   return null;
 };
 
+/* ── Skeleton components ──────────────────────────────────────── */
+
+function SkeletonLine({ className = "" }: { className?: string }) {
+  return <div className={`animate-pulse rounded-lg bg-white/5 ${className}`} />;
+}
+
+function RunSkeleton() {
+  return (
+    <div className="space-y-3">
+      {[1, 2, 3].map((i) => (
+        <div
+          key={i}
+          className="flex items-center justify-between rounded-2xl border border-white/10 bg-ink-950/70 px-4 py-4"
+        >
+          <div className="flex-1 space-y-2">
+            <SkeletonLine className="h-4 w-3/4" />
+            <SkeletonLine className="h-3 w-1/3" />
+          </div>
+          <div className="flex items-center gap-3">
+            <SkeletonLine className="h-6 w-16 rounded-full" />
+            <SkeletonLine className="h-4 w-8" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StatSkeleton() {
+  return (
+    <div className="space-y-4">
+      {[1, 2, 3].map((i) => (
+        <div
+          key={i}
+          className="rounded-2xl border border-white/10 bg-ink-950/80 px-4 py-4"
+        >
+          <SkeletonLine className="h-3 w-1/2" />
+          <SkeletonLine className="mt-3 h-7 w-1/3" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Main page ────────────────────────────────────────────────── */
+
 export default function DashboardPage() {
   const router = useRouter();
   const [runs, setRuns] = useState<RunItem[]>([]);
@@ -144,26 +190,28 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-ink-950 text-slate-100">
       <TopBar showLogout />
-      <main className="mx-auto w-full max-w-6xl px-6 py-10">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+      <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+        <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.35em] text-ember-300/80">
               Dashboard
             </p>
-            <h1 className="mt-2 text-3xl font-semibold text-white">
+            <h1 className="mt-2 text-2xl font-semibold text-white sm:text-3xl">
               Track your tailored runs.
             </h1>
           </div>
           <button
             onClick={() => router.push("/resume")}
-            className="rounded-full bg-ember-500 px-6 py-2.5 text-sm font-semibold text-ink-950 shadow-glow transition hover:-translate-y-0.5 hover:bg-ember-400"
+            className="self-start rounded-full bg-ember-500 px-6 py-2.5 text-sm font-semibold text-ink-950 shadow-glow transition hover:-translate-y-0.5 hover:bg-ember-400 sm:self-auto"
+            aria-label="Start a new resume tailoring job"
           >
             Start a new job
           </button>
         </div>
 
-        <section className="mt-8 grid gap-5 lg:grid-cols-[2fr_1fr]">
-          <div className="rounded-[28px] border border-white/10 bg-ink-900/70 p-6 shadow-panel backdrop-blur">
+        <section className="mt-8 grid gap-5 grid-cols-1 lg:grid-cols-[2fr_1fr]">
+          {/* Runs list */}
+          <div className="rounded-[28px] border border-white/10 bg-ink-900/70 p-5 shadow-panel backdrop-blur sm:p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-ember-300/80">
@@ -178,9 +226,7 @@ export default function DashboardPage() {
 
             <div className="mt-6 space-y-3">
               {loading ? (
-                <div className="rounded-2xl border border-white/10 bg-ink-950/70 px-4 py-6 text-sm text-slate-400">
-                  Loading runs...
-                </div>
+                <RunSkeleton />
               ) : runs.length === 0 ? (
                 <div className="rounded-2xl border border-white/10 bg-ink-950/70 px-4 py-6 text-sm text-slate-400">
                   No runs yet. Start your first job to see it here.
@@ -194,23 +240,24 @@ export default function DashboardPage() {
                     ? new Date(createdRaw).toLocaleString()
                     : "Just now";
                   const jobText = (run.JobText || run.jobText || "").replace(/\s+/g, " ").trim();
-                  const snippet = jobText ? `${jobText.slice(0, 80)}${jobText.length > 80 ? "…" : ""}` : "Job listing";
+                  const snippet = jobText ? `${jobText.slice(0, 80)}${jobText.length > 80 ? "\u2026" : ""}` : "Job listing";
 
                   return (
                     <button
                       key={runId}
                       onClick={() => router.push(`/result/${runId}`)}
-                      className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-ink-950/70 px-4 py-4 text-left transition hover:border-ember-400/60 hover:bg-ink-950"
+                      className="flex w-full items-center justify-between gap-3 rounded-2xl border border-white/10 bg-ink-950/70 px-4 py-4 text-left transition hover:border-ember-400/60 hover:bg-ink-950"
+                      aria-label={`View run: ${snippet}`}
                     >
-                      <div>
-                        <p className="text-sm font-semibold text-white">{snippet}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-white">{snippet}</p>
                         <p className="mt-1 text-xs text-slate-400">{created}</p>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-shrink-0 items-center gap-3">
                         <span className="rounded-full border border-ember-500/60 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-ember-300">
                           {status}
                         </span>
-                        <span className="text-xs text-ember-300">View</span>
+                        <span className="hidden text-xs text-ember-300 sm:inline">View</span>
                       </div>
                     </button>
                   );
@@ -219,25 +266,32 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Sidebar */}
           <div className="space-y-5">
-            <div className="rounded-[28px] border border-white/10 bg-ink-900/70 p-6 shadow-panel backdrop-blur">
+            <div className="rounded-[28px] border border-white/10 bg-ink-900/70 p-5 shadow-panel backdrop-blur sm:p-6">
               <p className="text-xs uppercase tracking-[0.3em] text-ember-300/80">Stats</p>
-              <div className="mt-5 space-y-4">
-                {stats.map((stat) => (
-                  <div
-                    key={stat.label}
-                    className="rounded-2xl border border-white/10 bg-ink-950/80 px-4 py-4"
-                  >
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                      {stat.label}
-                    </p>
-                    <p className="mt-2 text-2xl font-semibold text-white">{stat.value}</p>
-                  </div>
-                ))}
-              </div>
+              {loading ? (
+                <div className="mt-5">
+                  <StatSkeleton />
+                </div>
+              ) : (
+                <div className="mt-5 space-y-4">
+                  {stats.map((stat) => (
+                    <div
+                      key={stat.label}
+                      className="rounded-2xl border border-white/10 bg-ink-950/80 px-4 py-4"
+                    >
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                        {stat.label}
+                      </p>
+                      <p className="mt-2 text-2xl font-semibold text-white">{stat.value}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            <div className="rounded-[28px] border border-white/10 bg-ink-900/70 p-6 shadow-panel backdrop-blur">
+            <div className="rounded-[28px] border border-white/10 bg-ink-900/70 p-5 shadow-panel backdrop-blur sm:p-6">
               <p className="text-xs uppercase tracking-[0.3em] text-ember-300/80">
                 ATS score trend
               </p>
@@ -250,7 +304,7 @@ export default function DashboardPage() {
                     Run a few jobs to see the trend line.
                   </p>
                 ) : (
-                  <svg viewBox="0 0 240 80" className="h-24 w-full">
+                  <svg viewBox="0 0 240 80" className="h-24 w-full" role="img" aria-label="ATS score trend chart">
                     <polyline
                       fill="none"
                       stroke="#ff7a1a"

@@ -108,9 +108,16 @@ func (c *Client) GenerateRunReport(ctx context.Context, resumeText, jobText stri
 	req := openai.ChatCompletionNewParams{
 		Model: c.model,
 		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage("You are an expert ATS (Applicant Tracking System) analyzer. You analyze resumes against job descriptions and provide structured JSON responses."),
+			openai.SystemMessage(
+				"You are an expert ATS (Applicant Tracking System) analyzer with deep knowledge of " +
+					"how modern applicant tracking systems parse, tokenize, and score resumes. " +
+					"You understand keyword matching, semantic similarity, section weighting, and " +
+					"formatting pitfalls that cause ATS parsers to drop content. " +
+					"You provide structured JSON responses with actionable, specific feedback."),
 			openai.UserMessage(prompt),
 		},
+		Temperature:         openai.Float(0.3),
+		MaxCompletionTokens: openai.Int(2000),
 		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
 			OfJSONObject: func() *shared.ResponseFormatJSONObjectParam {
 				p := shared.NewResponseFormatJSONObjectParam()
@@ -164,7 +171,12 @@ func (c *Client) buildPrompt(resumeText, jobText string, bm25Signals any) string
 	b.WriteString("\n\n")
 
 	if bm25Signals != nil {
-		b.WriteString("BM25 SIGNALS:\n")
+		b.WriteString("BM25 KEYWORD ANALYSIS:\n")
+		b.WriteString("The following signals were computed using BM25 (a term-importance ranking algorithm) to compare the resume against the job description.\n")
+		b.WriteString("- top_job_terms: the most important keywords from the job description, ranked by BM25 score (higher = more important to the role)\n")
+		b.WriteString("- missing_job_terms: important job keywords that are ABSENT from the resume — these are gaps the candidate should address\n")
+		b.WriteString("- overlap_terms: keywords present in both the resume and job description (good matches)\n")
+		b.WriteString("- score: overall BM25 relevance score\n\n")
 		serialized, err := json.MarshalIndent(bm25Signals, "", "  ")
 		if err != nil {
 			b.WriteString("(BM25 analysis available, failed to serialize)\n\n")
@@ -174,6 +186,7 @@ func (c *Client) buildPrompt(resumeText, jobText string, bm25Signals any) string
 		}
 	}
 
+	b.WriteString("Use the BM25 signals to ground your analysis — missing terms should directly inform the change plan.\n\n")
 	b.WriteString("Respond with a JSON object in this exact format:\n")
 	b.WriteString(`{
   "ats_report": {
@@ -258,9 +271,15 @@ func (c *Client) GenerateResumeSpec(ctx context.Context, resumeText, jobText str
 	req := openai.ChatCompletionNewParams{
 		Model: c.model,
 		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage("You are a resume editor. Return ONLY JSON in the requested format."),
+			openai.SystemMessage(
+				"You are an expert resume writer who specializes in creating ATS-optimized resumes. " +
+					"You understand how applicant tracking systems parse resumes and which keywords matter most. " +
+					"You preserve the candidate's real experience and achievements while tailoring language " +
+					"and emphasis to match the target role. Return ONLY JSON in the requested format."),
 			openai.UserMessage(prompt),
 		},
+		Temperature:         openai.Float(0.3),
+		MaxCompletionTokens: openai.Int(4000),
 		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
 			OfJSONObject: func() *shared.ResponseFormatJSONObjectParam {
 				p := shared.NewResponseFormatJSONObjectParam()
@@ -322,7 +341,11 @@ func buildResumeSpecPrompt(resumeText, jobText string, bm25Signals any, projectC
 	b.WriteString("\n\n")
 
 	if bm25Signals != nil {
-		b.WriteString("BM25 SIGNALS:\n")
+		b.WriteString("BM25 KEYWORD ANALYSIS:\n")
+		b.WriteString("These signals rank keywords by importance (higher score = more important to the job).\n")
+		b.WriteString("- missing_job_terms: keywords in the job that are ABSENT from the resume — weave these into bullets where truthful\n")
+		b.WriteString("- overlap_terms: keywords already present in both — make sure these stay prominent\n")
+		b.WriteString("- top_job_terms: the most important job keywords overall\n\n")
 		serialized, err := json.MarshalIndent(bm25Signals, "", "  ")
 		if err != nil {
 			b.WriteString("(BM25 analysis available, failed to serialize)\n\n")
@@ -397,9 +420,11 @@ func (c *Client) GenerateProjectReasons(ctx context.Context, resumeText, jobText
 	req := openai.ChatCompletionNewParams{
 		Model: c.model,
 		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage("You are a resume analyst. Return ONLY JSON in the requested format."),
+			openai.SystemMessage("You are a resume analyst who explains project selection decisions. Return ONLY JSON in the requested format."),
 			openai.UserMessage(prompt),
 		},
+		Temperature:         openai.Float(0.3),
+		MaxCompletionTokens: openai.Int(1500),
 		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
 			OfJSONObject: func() *shared.ResponseFormatJSONObjectParam {
 				p := shared.NewResponseFormatJSONObjectParam()

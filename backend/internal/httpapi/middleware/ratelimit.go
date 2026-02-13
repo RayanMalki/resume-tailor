@@ -159,18 +159,22 @@ type Limiter struct {
 }
 
 type bucket struct {
-	tokens float64
-	last   time.Time
+	tokens       float64
+	last         time.Time
+	lastAccessed time.Time
 }
 
 func NewLimiter(limit int, window time.Duration) *Limiter {
 	rate := float64(limit) / window.Seconds()
-	return &Limiter{
+	l := &Limiter{
 		buckets: make(map[string]*bucket),
 		limit:   limit,
 		window:  window,
 		rate:    rate,
 	}
+	// Background goroutine to evict stale buckets and prevent unbounded memory growth.
+	go l.cleanup(2 * window)
+	return l
 }
 
 func (l *Limiter) Allow(key string) (bool, RateLimitResult) {
@@ -183,9 +187,11 @@ func (l *Limiter) Allow(key string) (bool, RateLimitResult) {
 	now := time.Now()
 	b, ok := l.buckets[key]
 	if !ok {
-		l.buckets[key] = &bucket{tokens: float64(l.limit - 1), last: now}
+		l.buckets[key] = &bucket{tokens: float64(l.limit - 1), last: now, lastAccessed: now}
 		return true, RateLimitResult{Limit: l.limit, Window: l.window, Remain: l.limit - 1}
 	}
+
+	b.lastAccessed = now
 
 	elapsed := now.Sub(b.last).Seconds()
 	if elapsed > 0 {
@@ -199,6 +205,30 @@ func (l *Limiter) Allow(key string) (bool, RateLimitResult) {
 
 	b.tokens -= 1
 	return true, RateLimitResult{Limit: l.limit, Window: l.window, Remain: int(b.tokens)}
+}
+
+// cleanup periodically removes buckets that haven't been accessed within maxAge.
+func (l *Limiter) cleanup(maxAge time.Duration) {
+	// Sweep at most every 5 minutes, but at least every maxAge.
+	interval := maxAge
+	if interval > 5*time.Minute {
+		interval = 5 * time.Minute
+	}
+	if interval < 30*time.Second {
+		interval = 30 * time.Second
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		l.mu.Lock()
+		cutoff := time.Now().Add(-maxAge)
+		for key, b := range l.buckets {
+			if b.lastAccessed.Before(cutoff) {
+				delete(l.buckets, key)
+			}
+		}
+		l.mu.Unlock()
+	}
 }
 
 func minFloat(a, b float64) float64 {

@@ -22,17 +22,17 @@ func Login(authSvc *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req LoginRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "Invalid request payload", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "invalid_request_payload")
 			return
 		}
 
 		token, expiresAt, userID, err := authSvc.LoginWithUser(r.Context(), req.Email, req.Password)
 		if err != nil {
 			if errors.Is(err, auth.ErrInvalidCredentials) {
-				http.Error(w, "Unauthorized: invalid credentials", http.StatusUnauthorized)
+				writeError(w, http.StatusUnauthorized, "invalid_credentials")
 				return
 			}
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, "internal_server_error")
 			return
 		}
 

@@ -62,3 +62,54 @@ func TestComputeDeterministicOrdering(t *testing.T) {
 		t.Fatalf("expected deterministic alpha/beta order, got %s/%s", first, second)
 	}
 }
+
+// TestStaticIDFDifferentiatesTermImportance verifies that the static IDF table
+// produces meaningfully different scores for rare vs common terms (the core fix
+// for improvement #4).
+func TestStaticIDFDifferentiatesTermImportance(t *testing.T) {
+	resume := "python developer kubernetes docker machine learning tensorflow data science"
+	job := "python developer kubernetes docker machine learning tensorflow data science"
+
+	got, err := Compute(resume, job)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(got.TopJobTerms) < 2 {
+		t.Fatalf("expected multiple top terms, got %d", len(got.TopJobTerms))
+	}
+
+	// With static IDF, terms should have different scores. The old
+	// single-document approach gave every present term the same IDF.
+	first := got.TopJobTerms[0]
+	last := got.TopJobTerms[len(got.TopJobTerms)-1]
+	if first.Score == last.Score {
+		t.Fatalf("static IDF should produce different scores for different terms, "+
+			"but first (%s=%.4f) == last (%s=%.4f)",
+			first.Term, first.Score, last.Term, last.Score)
+	}
+
+	// Rare terms (tensorflow, kubernetes) should score higher than common ones
+	// (developer, data).
+	t.Logf("top terms with static IDF:")
+	for _, ts := range got.TopJobTerms {
+		t.Logf("  %s: %.4f", ts.Term, ts.Score)
+	}
+}
+
+func TestLookupIDFKnownTerm(t *testing.T) {
+	val := lookupIDF("python")
+	if val == defaultCorpusIDF {
+		t.Fatal("expected python to have a specific IDF, got default")
+	}
+	if val <= 0 {
+		t.Fatalf("expected positive IDF for python, got %f", val)
+	}
+}
+
+func TestLookupIDFUnknownTerm(t *testing.T) {
+	val := lookupIDF("xyzzy_nonexistent_term_12345")
+	if val != defaultCorpusIDF {
+		t.Fatalf("expected default IDF %f for unknown term, got %f", defaultCorpusIDF, val)
+	}
+}

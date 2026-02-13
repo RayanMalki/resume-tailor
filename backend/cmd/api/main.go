@@ -14,8 +14,10 @@ import (
 	"resume-tailor/internal/auth"
 	"resume-tailor/internal/config"
 	"resume-tailor/internal/db"
+	"resume-tailor/internal/email"
 	"resume-tailor/internal/httpapi"
 	"resume-tailor/internal/jobs"
+	"resume-tailor/internal/monitoring"
 	"resume-tailor/internal/resumes"
 	"resume-tailor/internal/runreports"
 	"resume-tailor/internal/runs"
@@ -24,6 +26,10 @@ import (
 
 func main() {
 	ctx := context.Background()
+
+	// Initialize monitoring (Sentry when SENTRY_DSN is set).
+	monitoring.Init("resume-tailor-api")
+	defer monitoring.Flush(2 * time.Second)
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -70,7 +76,15 @@ func main() {
 		}
 	}
 
-	router := httpapi.NewRouter(authSvc, runsSvc, resumesSvc, runreportsSvc, artifactsSvc, allowedOrigins)
+	// Email service
+	emailSvc := email.NewSender()
+
+	// Start background session cleanup (runs every hour, stops on shutdown).
+	cleanupCtx, cleanupCancel := context.WithCancel(ctx)
+	defer cleanupCancel()
+	authSvc.StartSessionCleanup(cleanupCtx, 1*time.Hour)
+
+	router := httpapi.NewRouter(authSvc, runsSvc, resumesSvc, runreportsSvc, artifactsSvc, emailSvc, allowedOrigins)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,

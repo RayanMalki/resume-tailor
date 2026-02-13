@@ -2,7 +2,6 @@ package bm25
 
 import (
 	"fmt"
-	"math"
 	"sort"
 	"strings"
 	"unicode"
@@ -32,6 +31,10 @@ type Signals struct {
 }
 
 // Compute calculates BM25 signals for resume and job text matching.
+//
+// IDF values come from a pre-computed static table built from a large corpus
+// of job descriptions, replacing the previous single-document IDF calculation
+// which produced meaningless binary scores.
 func Compute(resumeText, jobText string) (Signals, error) {
 	resumeTokens := tokenize(resumeText)
 	jobTokens := tokenize(jobText)
@@ -40,7 +43,13 @@ func Compute(resumeText, jobText string) (Signals, error) {
 		return Signals{}, nil
 	}
 
-	bm25Instance, err := libbm25.NewBM25Okapi([]string{resumeText}, tokenize, defaultK1, defaultB, nil)
+	// We still use the library for the overall document score, but now pass
+	// both resume and job as separate corpus documents so the library's
+	// internal IDF has at least two documents to work with.
+	bm25Instance, err := libbm25.NewBM25Okapi(
+		[]string{resumeText, jobText},
+		tokenize, defaultK1, defaultB, nil,
+	)
 	if err != nil {
 		return Signals{}, fmt.Errorf("bm25 init: %w", err)
 	}
@@ -50,6 +59,7 @@ func Compute(resumeText, jobText string) (Signals, error) {
 		return Signals{}, fmt.Errorf("bm25 score: %w", err)
 	}
 
+	// The resume is document 0 in the corpus.
 	overallScore := 0.0
 	if len(scores) > 0 {
 		overallScore = scores[0]
@@ -67,18 +77,22 @@ func Compute(resumeText, jobText string) (Signals, error) {
 
 	for term, qtf := range jobFreq {
 		tf := resumeFreq[term]
+
+		// Use static corpus IDF instead of single-document IDF.
+		termIDF := lookupIDF(term)
+
 		if tf > 0 {
 			overlapTerms = append(overlapTerms, term)
 		} else {
 			missingTerms = append(missingTerms, TermScore{
 				Term:  term,
-				Score: idf(1, 0) * float64(qtf),
+				Score: termIDF * float64(qtf),
 			})
 		}
 
 		topTerms = append(topTerms, TermScore{
 			Term:  term,
-			Score: bm25TermScore(tf, docLen, avgDocLen, idf(1, boolToDF(tf > 0))),
+			Score: bm25TermScore(tf, docLen, avgDocLen, termIDF),
 		})
 	}
 
@@ -147,19 +161,6 @@ func bm25TermScore(tf int, docLen, avgDocLen, idfVal float64) float64 {
 	return idfVal * (numerator / denominator)
 }
 
-func idf(totalDocs, docFreq int) float64 {
-	n := float64(totalDocs)
-	df := float64(docFreq)
-	return math.Log((n-df+0.5)/(df+0.5) + 1.0)
-}
-
-func boolToDF(hasTerm bool) int {
-	if hasTerm {
-		return 1
-	}
-	return 0
-}
-
 func sortStrings(values []string) {
 	sort.Strings(values)
 }
@@ -173,10 +174,38 @@ func sortTermScores(items []TermScore) {
 	})
 }
 
+// stopwords contains common English words plus job-posting boilerplate that add
+// noise to BM25 signals without providing meaningful differentiation.
 var stopwords = map[string]struct{}{
-	"a": {}, "an": {}, "and": {}, "are": {}, "as": {}, "at": {}, "be": {}, "by": {},
-	"for": {}, "from": {}, "in": {}, "is": {}, "of": {}, "on": {}, "or": {}, "that": {},
-	"the": {}, "this": {}, "to": {}, "with": {},
+	// Standard English stopwords
+	"a": {}, "an": {}, "and": {}, "are": {}, "as": {}, "at": {}, "be": {}, "been": {},
+	"being": {}, "but": {}, "by": {}, "can": {}, "could": {}, "did": {}, "do": {},
+	"does": {}, "doing": {}, "done": {}, "each": {}, "few": {}, "for": {}, "from": {},
+	"get": {}, "got": {}, "had": {}, "has": {}, "have": {}, "having": {}, "he": {},
+	"her": {}, "here": {}, "hers": {}, "him": {}, "his": {}, "how": {}, "if": {},
+	"in": {}, "into": {}, "is": {}, "it": {}, "its": {}, "just": {}, "may": {},
+	"me": {}, "might": {}, "more": {}, "most": {}, "must": {}, "my": {}, "no": {},
+	"nor": {}, "not": {}, "now": {}, "of": {}, "on": {}, "only": {}, "or": {},
+	"other": {}, "our": {}, "out": {}, "own": {}, "same": {}, "she": {}, "should": {},
+	"so": {}, "some": {}, "such": {}, "than": {}, "that": {}, "the": {}, "their": {},
+	"them": {}, "then": {}, "there": {}, "these": {}, "they": {}, "this": {}, "those": {},
+	"through": {}, "to": {}, "too": {}, "under": {}, "up": {}, "us": {}, "very": {},
+	"was": {}, "we": {}, "were": {}, "what": {}, "when": {}, "where": {}, "which": {},
+	"while": {}, "who": {}, "whom": {}, "why": {}, "will": {}, "with": {}, "would": {},
+	"you": {}, "your": {}, "yours": {}, "about": {}, "above": {}, "after": {}, "again": {},
+	"against": {}, "all": {}, "also": {}, "am": {}, "any": {}, "because": {}, "before": {},
+	"below": {}, "between": {}, "both": {}, "during": {}, "further": {}, "itself": {},
+	"off": {}, "once": {}, "over": {}, "shall": {}, "until": {}, "upon": {},
+
+	// Job-posting boilerplate — these appear in almost every listing
+	// and don't help distinguish one role from another.
+	"role": {}, "position": {}, "company": {}, "team": {}, "looking": {}, "seeking": {},
+	"responsibilities": {}, "requirements": {}, "qualifications": {}, "preferred": {},
+	"required": {}, "ability": {}, "including": {}, "within": {}, "across": {},
+	"strong": {}, "excellent": {}, "proven": {}, "experience": {}, "work": {},
+	"working": {}, "well": {}, "environment": {}, "opportunity": {}, "join": {},
+	"ideal": {}, "candidate": {}, "applicant": {}, "apply": {}, "equal": {},
+	"employer": {}, "benefits": {}, "salary": {}, "competitive": {},
 }
 
 func isStopword(token string) bool {

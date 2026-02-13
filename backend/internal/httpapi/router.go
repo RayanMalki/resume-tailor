@@ -5,6 +5,7 @@ import (
 
 	"resume-tailor/internal/artifacts"
 	"resume-tailor/internal/auth"
+	"resume-tailor/internal/email"
 	"resume-tailor/internal/httpapi/handlers"
 	"resume-tailor/internal/httpapi/middleware"
 	"resume-tailor/internal/resumes"
@@ -14,13 +15,15 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes.Service, reportsSvc *runreports.Service, artifactsSvc *artifacts.Service, allowedOrigins []string) http.Handler {
+func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes.Service, reportsSvc *runreports.Service, artifactsSvc *artifacts.Service, emailSvc *email.Sender, allowedOrigins []string) http.Handler {
 	r := chi.NewRouter()
 
 	// Global middleware
 	r.Use(middleware.Recover)
+	r.Use(middleware.SecurityHeaders)
 	r.Use(middleware.Logging)
 	r.Use(middleware.CORS(allowedOrigins))
+	r.Use(middleware.CSRFCheck)
 	r.Use(middleware.Limits)
 	r.Use(middleware.SuspiciousScanBlocker)
 	r.Use(middleware.RateLimit)
@@ -37,6 +40,9 @@ func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes
 		r.Post("/auth/logout", handlers.Logout(authSvc))
 		r.Get("/auth/google/start", handlers.GoogleStart(authSvc))
 		r.Get("/auth/google/callback", handlers.GoogleCallback(authSvc))
+		r.Get("/auth/verify", handlers.VerifyEmail(authSvc))
+		r.Post("/auth/forgot-password", handlers.ForgotPassword(authSvc, emailSvc))
+		r.Post("/auth/reset-password", handlers.ResetPassword(authSvc))
 
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.AuthRequired(authSvc))
@@ -55,6 +61,8 @@ func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes
 			//POST request
 			r.Post("/runs", handlers.CreateRunHandler(runsSvc, resumesSvc))
 			r.Post("/resumes", handlers.CreateResumeHandler(resumesSvc))
+			r.Post("/resumes/upload", handlers.UploadResumeHandler(resumesSvc))
+			r.Post("/auth/resend-verification", handlers.ResendVerification(authSvc, emailSvc))
 		})
 
 	})

@@ -27,28 +27,28 @@ func Signup(authSvc *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req SignupRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "Invalid request payload", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "invalid_request_payload")
 			return
 		}
 
 		id, err := authSvc.Signup(r.Context(), req.Email, req.Password, req.DisplayName)
 		if err != nil {
 			if errors.Is(err, auth.ErrEmailTaken) {
-				http.Error(w, "Email already in use", http.StatusConflict)
+				writeError(w, http.StatusConflict, "email_already_in_use")
 				return
 			}
 			if errors.Is(err, auth.ErrWeakPassword) {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, "internal_server_error")
 			return
 		}
 
 		// MVP: auto-login after signup (sets HttpOnly cookie)
 		token, expiresAt, err := authSvc.Login(r.Context(), req.Email, req.Password)
 		if err != nil {
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, "internal_server_error")
 			return
 		}
 

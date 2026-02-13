@@ -136,7 +136,7 @@ function JobPageInner() {
     try {
       const res = await fetch(`${API_BASE_URL}/v1/runs`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
         credentials: "include",
         body: JSON.stringify({
           resumeId,
@@ -162,26 +162,27 @@ function JobPageInner() {
   return (
     <div className="min-h-screen bg-ink-950 text-slate-100">
       <TopBar showLogout />
-      <main className="mx-auto flex w-full max-w-5xl flex-1 items-start justify-center px-6 py-16">
-        <div className="w-full max-w-3xl rounded-[28px] border border-white/10 bg-ink-900/70 p-8 shadow-panel backdrop-blur">
-          <h1 className="text-2xl font-semibold text-white">Paste job description</h1>
+      <main className="mx-auto flex w-full max-w-5xl flex-1 items-start justify-center px-4 py-8 sm:px-6 sm:py-16">
+        <div className="w-full max-w-3xl rounded-[28px] border border-white/10 bg-ink-900/70 p-5 shadow-panel backdrop-blur sm:p-8">
+          <h1 className="text-xl font-semibold text-white sm:text-2xl">Paste job description</h1>
           <p className="mt-2 text-sm text-slate-400">
-            We will tailor your resume to match this job description.
+            We&apos;ll tailor your resume to match this job description.
           </p>
 
           <div className="mt-6">
-            <label className="text-sm font-medium text-slate-200">Job description</label>
+            <label htmlFor="job-text" className="text-sm font-medium text-slate-200">Job description</label>
             <textarea
+              id="job-text"
               value={jobText}
               onChange={(e) => setJobText(e.target.value)}
               rows={10}
-              className="mt-1 w-full rounded-xl border border-white/10 bg-ink-950 px-3 py-2 text-slate-100"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-ink-950 px-3 py-2.5 text-slate-100 focus:border-ember-500/60 focus:outline-none focus:ring-1 focus:ring-ember-500/40"
               placeholder="Paste the job description here..."
             />
           </div>
 
           <div className="mt-6 rounded-xl border border-white/10 bg-ink-950/40 p-4">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
               <div>
                 <h2 className="text-sm font-semibold text-slate-200">Project relevance controls</h2>
                 <p className="text-xs text-slate-400">Pin projects to force inclusion, exclude irrelevant ones, or keep auto.</p>
@@ -189,7 +190,9 @@ function JobPageInner() {
             </div>
 
             <div className="mt-3 flex gap-2">
+              <label htmlFor="add-project" className="sr-only">Add project name</label>
               <input
+                id="add-project"
                 value={newProjectName}
                 onChange={(e) => setNewProjectName(e.target.value)}
                 onKeyDown={(e) => {
@@ -198,12 +201,12 @@ function JobPageInner() {
                     addProject();
                   }
                 }}
-                className="w-full rounded-xl border border-white/10 bg-ink-950 px-3 py-2 text-sm text-slate-100"
+                className="w-full rounded-xl border border-white/10 bg-ink-950 px-3 py-2.5 text-sm text-slate-100 focus:border-ember-500/60 focus:outline-none focus:ring-1 focus:ring-ember-500/40"
                 placeholder="Add project name"
               />
               <button
                 onClick={addProject}
-                className="rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-100 hover:bg-white/5"
+                className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-slate-100 transition hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
                 type="button"
               >
                 Add
@@ -217,40 +220,54 @@ function JobPageInner() {
                 sortedControls.map((control) => (
                   <div
                     key={control.name}
-                    className="flex items-center gap-2 rounded-lg border border-white/10 bg-ink-900/60 px-3 py-2"
+                    className="flex flex-col gap-2 rounded-lg border border-white/10 bg-ink-900/60 px-3 py-2 sm:flex-row sm:items-center"
                   >
                     <span className="flex-1 text-sm text-slate-100">{control.name}</span>
-                    <select
-                      value={control.mode}
-                      onChange={(e) => setMode(control.name, e.target.value as ProjectMode)}
-                      className="rounded-md border border-white/10 bg-ink-950 px-2 py-1 text-xs text-slate-100"
-                    >
-                      <option value="pinned">Pin</option>
-                      <option value="auto">Auto</option>
-                      <option value="exclude">Exclude</option>
-                    </select>
-                    <button
-                      onClick={() => removeProject(control.name)}
-                      className="rounded-md border border-white/10 px-2 py-1 text-xs text-slate-300 hover:bg-white/5"
-                      type="button"
-                    >
-                      Remove
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <label htmlFor={`mode-${control.name}`} className="sr-only">Mode for {control.name}</label>
+                      <select
+                        id={`mode-${control.name}`}
+                        value={control.mode}
+                        onChange={(e) => setMode(control.name, e.target.value as ProjectMode)}
+                        className="rounded-md border border-white/10 bg-ink-950 px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-ember-500/40"
+                      >
+                        <option value="pinned">Pin</option>
+                        <option value="auto">Auto</option>
+                        <option value="exclude">Exclude</option>
+                      </select>
+                      <button
+                        onClick={() => removeProject(control.name)}
+                        className="rounded-md border border-white/10 px-2 py-1.5 text-xs text-slate-300 transition hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
+                        type="button"
+                        aria-label={`Remove ${control.name}`}
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
             </div>
           </div>
 
-          {error ? <p className="mt-4 text-sm text-rose-300">{error}</p> : null}
+          {error ? (
+            <div role="alert" className="mt-4 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2">
+              <p className="text-sm text-rose-300">{error}</p>
+            </div>
+          ) : null}
 
           <div className="mt-6 flex justify-end">
             <button
               onClick={handleGenerate}
               disabled={loading || jobText.trim().length === 0}
-              className="rounded-full bg-ember-500 px-5 py-2 text-sm font-semibold text-ink-950 shadow-glow transition hover:-translate-y-0.5 hover:bg-ember-400 disabled:opacity-70"
+              className="flex items-center gap-2 rounded-full bg-ember-500 px-5 py-2.5 text-sm font-semibold text-ink-950 shadow-glow transition hover:-translate-y-0.5 hover:bg-ember-400 disabled:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-900"
             >
-              {loading ? "Generating..." : "Generate"}
+              {loading ? (
+                <>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-ink-950/30 border-t-ink-950" />
+                  Generating&hellip;
+                </>
+              ) : "Generate"}
             </button>
           </div>
         </div>

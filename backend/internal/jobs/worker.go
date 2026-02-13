@@ -21,6 +21,7 @@ import (
 )
 
 const pollInterval = 1 * time.Second
+const jobTimeout = 5 * time.Minute
 
 const (
 	runStatusQueued    = "queued"
@@ -104,41 +105,46 @@ func (w *Worker) processNextJob(ctx context.Context) error {
 
 	slog.Info("claimed job", "job_id", job.ID, "run_id", job.RunID, "worker_id", w.workerID)
 
+	// Enforce a timeout on the entire job so a hung LLM call or PDF compile
+	// cannot block the worker forever.
+	jobCtx, cancel := context.WithTimeout(ctx, jobTimeout)
+	defer cancel()
+
 	// Update run status to running
-	if err := w.updateRunStatus(ctx, job.RunID, runStatusRunning, nil); err != nil {
+	if err := w.updateRunStatus(jobCtx, job.RunID, runStatusRunning, nil); err != nil {
 		slog.Error("failed to update run status to running", "error", err, "run_id", job.RunID)
 		// Mark job as failed
-		w.jobsRepo.MarkJobFailed(ctx, job.ID, fmt.Sprintf("failed to update run status: %v", err), job.Attempts < job.MaxAttempts)
+		w.jobsRepo.MarkJobFailed(jobCtx, job.ID, fmt.Sprintf("failed to update run status: %v", err), job.Attempts < job.MaxAttempts)
 		return err
 	}
 
-	// Process the run (MVP stub)
-	if err := w.processRun(ctx, job.RunID); err != nil {
+	// Process the run
+	if err := w.processRun(jobCtx, job.RunID); err != nil {
 		slog.Error("failed to process run", "error", err, "run_id", job.RunID)
 		errorMsg := safeErrorMessage(err)
 
 		// Update run status to failed
-		if err := w.updateRunStatus(ctx, job.RunID, runStatusFailed, &errorMsg); err != nil {
+		if err := w.updateRunStatus(jobCtx, job.RunID, runStatusFailed, &errorMsg); err != nil {
 			slog.Error("failed to update run status to failed", "error", err, "run_id", job.RunID)
 		}
 
 		// Update job status
 		requeue := job.Attempts < job.MaxAttempts
-		if err := w.jobsRepo.MarkJobFailed(ctx, job.ID, errorMsg, requeue); err != nil {
+		if err := w.jobsRepo.MarkJobFailed(jobCtx, job.ID, errorMsg, requeue); err != nil {
 			slog.Error("failed to mark job as failed", "error", err, "job_id", job.ID)
 		}
 		return err
 	}
 
 	// Success: update run status to succeeded
-	if err := w.updateRunStatus(ctx, job.RunID, runStatusSucceeded, nil); err != nil {
+	if err := w.updateRunStatus(jobCtx, job.RunID, runStatusSucceeded, nil); err != nil {
 		slog.Error("failed to update run status to succeeded", "error", err, "run_id", job.RunID)
-		w.jobsRepo.MarkJobFailed(ctx, job.ID, fmt.Sprintf("failed to update run status: %v", err), false)
+		w.jobsRepo.MarkJobFailed(jobCtx, job.ID, fmt.Sprintf("failed to update run status: %v", err), false)
 		return err
 	}
 
 	// Mark job as done
-	if err := w.jobsRepo.MarkJobDone(ctx, job.ID); err != nil {
+	if err := w.jobsRepo.MarkJobDone(jobCtx, job.ID); err != nil {
 		slog.Error("failed to mark job as done", "error", err, "job_id", job.ID)
 		return err
 	}
@@ -311,33 +317,6 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 				}
 			}
 		}
-	}
-
-	// Placeholder JSON for artifacts (LaTeX/PDF generation not implemented yet)
-	resumeSpec := map[string]interface{}{
-		"version":   "1.0",
-		"sections":  []string{"placeholder section"},
-		"timestamp": time.Now().Unix(),
-	}
-
-	resumeSpecJSON, err := json.Marshal(resumeSpec)
-	if err != nil {
-		return fmt.Errorf("failed to marshal resume spec: %w", err)
-	}
-
-	// Insert into run_artifacts
-	const insertArtifactQ = `
-INSERT INTO run_artifacts (run_id, resume_spec, latex_path, pdf_path)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (run_id) DO UPDATE
-SET resume_spec = $2, latex_path = $3, pdf_path = $4, created_at = now()`
-
-	latexPath := fmt.Sprintf("/generated/%s/resume.tex", runID.String())
-	pdfPath := fmt.Sprintf("/generated/%s/resume.pdf", runID.String())
-
-	_, err = w.db.Exec(ctx, insertArtifactQ, runID, resumeSpecJSON, latexPath, pdfPath)
-	if err != nil {
-		return fmt.Errorf("failed to insert run artifact: %w", err)
 	}
 
 	return nil

@@ -12,10 +12,34 @@ body {
 
 input,
 textarea,
-button {
+button,
+select {
   font-family: inherit;
 }
 
 .bg-grid {
   background-size: 120px 120px;
+}
+
+/* ── Skip-to-content link (a11y) ──────────────────────────────── */
+.skip-link {
+  @apply fixed left-2 top-2 z-50 -translate-y-full rounded-lg bg-ember-500 px-4 py-2 text-sm font-semibold text-ink-950 opacity-0 transition focus:translate-y-0 focus:opacity-100;
+}
+
+/* ── Focus-visible ring (a11y) ────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid rgba(255, 122, 26, 0.7);
+  outline-offset: 2px;
+}
+
+/* ── Reduced motion support (a11y) ────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

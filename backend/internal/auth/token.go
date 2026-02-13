@@ -13,7 +13,7 @@ func NewToken() (string, error) {
 	buff := make([]byte, 32)
 	n, err := rand.Read(buff)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 	if n != 32 {
 		return "", fmt.Errorf("expected 32 random bytes, got %d", n)

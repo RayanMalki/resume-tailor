@@ -12,7 +12,7 @@ func ListRunsHandler(runsSvc *runs.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := middleware.UserIDFromContext(r.Context())
 		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 
@@ -24,7 +24,7 @@ func ListRunsHandler(runsSvc *runs.Service) http.HandlerFunc {
 		if raw := r.URL.Query().Get("limit"); raw != "" {
 			v, err := strconv.Atoi(raw)
 			if err != nil || v <= 0 {
-				http.Error(w, "Bad Request: invalid limit", http.StatusBadRequest)
+				writeError(w, http.StatusBadRequest, "invalid_limit")
 				return
 			}
 			if v > 100 {
@@ -37,7 +37,7 @@ func ListRunsHandler(runsSvc *runs.Service) http.HandlerFunc {
 		if raw := r.URL.Query().Get("offset"); raw != "" {
 			v, err := strconv.Atoi(raw)
 			if err != nil || v < 0 {
-				http.Error(w, "Bad Request: invalid offset", http.StatusBadRequest)
+				writeError(w, http.StatusBadRequest, "invalid_offset")
 				return
 			}
 			offset = v
@@ -45,7 +45,7 @@ func ListRunsHandler(runsSvc *runs.Service) http.HandlerFunc {
 
 		list, err := runsSvc.ListRunsByUser(r.Context(), userID, limit, offset)
 		if err != nil {
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, "internal_server_error")
 			return
 		}
 

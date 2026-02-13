@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -18,6 +19,29 @@ func NewService(repo *Repo) *Service {
 	return &Service{
 		repo: repo,
 	}
+}
+
+// StartSessionCleanup runs a background goroutine that periodically deletes
+// expired sessions from the database so the sessions table doesn't grow
+// without bound. It stops when the context is cancelled.
+func (s *Service) StartSessionCleanup(ctx context.Context, interval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				deleted, err := s.repo.DeleteExpiredSessions(ctx)
+				if err != nil {
+					slog.Error("session cleanup failed", "error", err)
+				} else if deleted > 0 {
+					slog.Info("expired sessions cleaned up", "deleted", deleted)
+				}
+			}
+		}
+	}()
 }
 
 func (s *Service) Signup(ctx context.Context, email string, password string, displayName string) (uuid.UUID, error) {

@@ -1,23 +1,53 @@
-# macOS
+# ── OS ──────────────────────────────────────────────────────────────
 .DS_Store
+Thumbs.db
 
-# IDEs
+# ── IDEs ────────────────────────────────────────────────────────────
 .idea/
+.vscode/
+*.swp
+*.swo
+*~
 
-# Binaries
+# ── Environment / secrets ───────────────────────────────────────────
+# NEVER commit .env files — they contain API keys and database URLs.
+# Use .env.example as a safe template.
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+backend/web/.env.local
+backend/web/.env.*.local
+
+# ── Go binaries & build output ──────────────────────────────────────
 backend/api
 backend/worker
+backend/bin/
 
-# Local files
-backend/.env
-backend/web/.env.local
-backend/cookies.txt
+# ── Node / Next.js ──────────────────────────────────────────────────
+node_modules/
+.next/
+backend/web/node_modules/
+backend/web/.next/
+
+# ── Credentials / cookies ──────────────────────────────────────────
 cookies.txt
+backend/cookies.txt
+
+# ── Logs ────────────────────────────────────────────────────────────
+*.log
+
+# ── Generated LaTeX template output ────────────────────────────────
+/template
 template/resume.tex
 template/src/education.tex
 template/src/ExperiencePro.tex
 template/src/heading.tex
 template/src/projects.tex
 template/src/skills.tex
-/template
+
+# ── Misc ────────────────────────────────────────────────────────────
 backend/README.md
+IMPROVEMENTS.md

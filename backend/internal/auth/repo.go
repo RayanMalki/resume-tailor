@@ -199,6 +199,16 @@ func (r *Repo) DeleteSessionByTokenHash(ctx context.Context, tokenHash string) e
 
 }
 
+// DeleteExpiredSessions removes all sessions that have passed their expiry time.
+func (r *Repo) DeleteExpiredSessions(ctx context.Context) (int64, error) {
+	const q = `DELETE FROM sessions WHERE expires_at < now()`
+	cmd, err := r.db.Exec(ctx, q)
+	if err != nil {
+		return 0, err
+	}
+	return cmd.RowsAffected(), nil
+}
+
 func (s *Service) Authenticate(ctx context.Context, token string) (uuid.UUID, error) {
 	if strings.TrimSpace(token) == "" {
 		return uuid.Nil, ErrInvalidCredentials

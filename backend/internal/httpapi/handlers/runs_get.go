@@ -15,26 +15,24 @@ func GetRunByIdHandler(runsSvc *runs.Service) http.HandlerFunc {
 
 		userID, ok := middleware.UserIDFromContext(r.Context())
 		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
-
 		}
+
 		raw := chi.URLParam(r, "runID")
 		runID, err := uuid.Parse(raw)
-
 		if err != nil {
-			http.Error(w, "Bad Request", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "invalid_run_id")
 			return
 		}
 
 		run, err := runsSvc.GetRunByID(r.Context(), userID, runID)
 		if errors.Is(err, runs.ErrRunNotFound) {
-			http.Error(w, "Not Found", http.StatusNotFound)
+			writeError(w, http.StatusNotFound, "run_not_found")
 			return
-
 		}
 		if err != nil {
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, "internal_server_error")
 			return
 		}
 
