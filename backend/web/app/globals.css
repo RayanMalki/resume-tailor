@@ -28,7 +28,7 @@ select {
 
 /* ── Focus-visible ring (a11y) ────────────────────────────────── */
 *:focus-visible {
-  outline: 2px solid rgba(59, 130, 246, 0.7);
+  outline: 2px solid rgba(16, 185, 129, 0.7);
   outline-offset: 2px;
 }
 

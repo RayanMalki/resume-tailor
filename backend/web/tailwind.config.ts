@@ -6,21 +6,21 @@ const config: Config = {
     extend: {
       colors: {
         ink: {
-          950: "#0c1220",
-          900: "#121a2b",
-          800: "#1a2438"
+          950: "#050505",
+          900: "#0b0b0b",
+          800: "#141414"
         },
         ember: {
-          600: "#1d4ed8",
-          500: "#3b82f6",
-          400: "#60a5fa",
-          300: "#93c5fd",
-          200: "#bfdbfe"
+          600: "#059669",
+          500: "#10b981",
+          400: "#34d399",
+          300: "#6ee7b7",
+          200: "#a7f3d0"
         },
         glow: {
-          orange: "#3b82f6",
-          red: "#2563eb",
-          amber: "#22d3ee"
+          orange: "#10b981",
+          red: "#34d399",
+          amber: "#86efac"
         }
       },
       fontFamily: {
@@ -29,8 +29,8 @@ const config: Config = {
       },
       boxShadow: {
         card: "0 10px 30px rgba(15, 23, 42, 0.08)",
-        glow: "0 10px 30px rgba(59, 130, 246, 0.22)",
-        panel: "0 18px 46px rgba(2, 6, 23, 0.35)"
+        glow: "0 10px 30px rgba(16, 185, 129, 0.22)",
+        panel: "0 24px 60px rgba(0, 0, 0, 0.5)"
       },
       keyframes: {
         caret: {
