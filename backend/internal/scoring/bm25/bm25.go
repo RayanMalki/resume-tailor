@@ -130,6 +130,66 @@ func stripAccents(s string) string {
 	return b.String()
 }
 
+// synonyms maps technology aliases to a canonical form so BM25 treats them as the same token.
+// Both directions must be defined (e.g. "go"→"golang" AND "golang"→"go") — the canonical
+// form is the FIRST entry so both occurrences end up as the same token.
+var synonyms = map[string]string{
+	// Go / Golang
+	"go":     "golang",
+	"golang": "golang",
+	// JavaScript / JS
+	"js":         "javascript",
+	"javascript": "javascript",
+	// TypeScript / TS
+	"ts":         "typescript",
+	"typescript": "typescript",
+	// PostgreSQL variants
+	"postgres":   "postgresql",
+	"postgresql": "postgresql",
+	// Kubernetes / K8s
+	"k8s":        "kubernetes",
+	"kubernetes": "kubernetes",
+	// C# / CSharp
+	"csharp": "csharp",
+	"c#":     "csharp",
+	// Continuous Integration / Continuous Deployment
+	"ci":   "cicd",
+	"cd":   "cicd",
+	"cicd": "cicd",
+	// ReactJS / React
+	"reactjs": "react",
+	"react":   "react",
+	// NodeJS / Node
+	"nodejs": "nodejs",
+	"node":   "nodejs",
+	// REST / RESTful
+	"rest":    "rest",
+	"restful": "rest",
+	// Amazon Web Services
+	"aws":    "aws",
+	"amazon": "aws",
+	// Google Cloud Platform
+	"gcp": "gcp",
+	// Infonuagique (French for cloud computing)
+	"infonuagique": "cloud",
+	"cloud":        "cloud",
+	// Agile / Scrum
+	"scrum": "agile",
+	"agile": "agile",
+	// DevOps
+	"devops": "devops",
+	// Microservices
+	"microservices": "microservices",
+	"microservice":  "microservices",
+}
+
+func canonicalize(token string) string {
+	if canon, ok := synonyms[token]; ok {
+		return canon
+	}
+	return token
+}
+
 func tokenize(text string) []string {
 	if text == "" {
 		return nil
@@ -149,7 +209,7 @@ func tokenize(text string) []string {
 		}
 		token := b.String()
 		if !isStopword(token) {
-			tokens = append(tokens, token)
+			tokens = append(tokens, canonicalize(token))
 		}
 		b.Reset()
 	}
@@ -269,6 +329,36 @@ var stopwords = map[string]struct{}{
 	"rejoindre": {}, "rejoignez": {},
 	"passionnee": {}, "passionne": {},
 	"dynamique": {}, "motivee": {}, "motive": {},
+	"carriere": {}, "emploi": {}, "stage": {}, "stagiaire": {},
+	"connaissances": {}, "connaissance": {},
+	"apprentissage": {}, "apprendre": {},
+	"contenu": {}, "contenus": {},
+	"personnalises": {}, "personnalise": {},
+	"favoriser": {}, "continue": {}, "enrichir": {},
+	"disponibles": {}, "disponible": {},
+	"possedant": {}, "differentes": {}, "different": {},
+	"expertises": {}, "expertise": {}, "experiences": {},
+	"profils": {}, "diversifies": {},
+	"points": {}, "vue": {},
+	"titre": {}, "positif": {}, "organisation": {},
+	"grace": {}, "permettent": {}, "permet": {},
+	"maitriser": {}, "metier": {},
+	"mode": {}, "bases": {},
+	"atout": {}, "comprehension": {},
+	"prerequis": {}, "prealables": {},
+	"secteur": {}, "activite": {},
+	"curiosite": {}, "fort": {}, "esprit": {},
+	"rigueur": {}, "travail": {},
+	"completement": {}, "completion": {},
+	"connexe": {}, "etudes": {},
+	"relever": {}, "defis": {},
+	"supporter": {}, "croissance": {},
+	"confirmer": {}, "livrables": {}, "via": {},
+	"integrer": {}, "inspirante": {}, "respecte": {},
+	"meilleures": {}, "pratiques": {},
+	"innovantes": {}, "innovante": {},
+	"maximum": {}, "valeur": {},
+	"divers": {}, "partenaires": {}, "affaires": {},
 
 	// ── City names (not useful for ATS keyword matching) ──────────────
 	"montreal": {}, "toronto": {}, "vancouver": {}, "ottawa": {}, "quebec": {},

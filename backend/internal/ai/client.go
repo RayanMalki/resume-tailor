@@ -100,10 +100,11 @@ func NewClientFromEnv(apiKey, model string) (*Client, error) {
 	}, nil
 }
 
-// GenerateRunReport generates an ATS report and change plan using OpenAI
-func (c *Client) GenerateRunReport(ctx context.Context, resumeText, jobText string, bm25Signals any) (ATSReport, ChangePlan, error) {
+// GenerateRunReport generates an ATS report and change plan using OpenAI.
+// tailoredLatex is the generated resume LaTeX so the report can compare original vs tailored.
+func (c *Client) GenerateRunReport(ctx context.Context, resumeText, jobText string, bm25Signals any, tailoredLatex string) (ATSReport, ChangePlan, error) {
 	// Build the prompt
-	prompt := c.buildPrompt(resumeText, jobText, bm25Signals)
+	prompt := c.buildPrompt(resumeText, jobText, bm25Signals, tailoredLatex)
 
 	// Call OpenAI
 	req := openai.ChatCompletionNewParams{
@@ -155,21 +156,31 @@ func (c *Client) GenerateRunReport(ctx context.Context, resumeText, jobText stri
 	return reportResp.ATSReport, reportResp.ChangePlan, nil
 }
 
-func (c *Client) buildPrompt(resumeText, jobText string, bm25Signals any) string {
+func (c *Client) buildPrompt(resumeText, jobText string, bm25Signals any, tailoredLatex string) string {
 	var b strings.Builder
 
-	b.WriteString("Analyze the following resume against the job description and provide:\n")
-	b.WriteString("1. An ATS compatibility score (0.0 to 1.0)\n")
-	b.WriteString("2. Notes explaining the score\n")
-	b.WriteString("3. A change plan with specific recommendations\n")
-	b.WriteString("4. A human-readable summary (2-4 sentences) explaining what was changed in the tailored resume and why\n\n")
+	b.WriteString("You are given the ORIGINAL resume, the JOB DESCRIPTION, and the TAILORED RESUME that was already generated.\n")
+	b.WriteString("Your job is to compare the original vs tailored resume and produce an honest report.\n\n")
+
+	b.WriteString("Provide:\n")
+	b.WriteString("1. An ATS compatibility score (0.0 to 1.0) for the TAILORED resume against the job\n")
+	b.WriteString("2. Notes explaining the score of the TAILORED resume\n")
+	b.WriteString("3. A change plan listing the ACTUAL changes that were made (compare original vs tailored)\n")
+	b.WriteString("4. A summary (2-4 sentences) describing what actually changed and why\n\n")
+
+	b.WriteString("CRITICAL RULES:\n")
+	b.WriteString("- The 'changes' list must describe ONLY changes that ACTUALLY exist in the tailored resume.\n")
+	b.WriteString("- Compare original vs tailored carefully. If something was NOT changed, do NOT claim it was.\n")
+	b.WriteString("- If no meaningful changes were made, say so honestly and explain why.\n")
+	b.WriteString("- The 'score' should reflect the TAILORED resume's ATS compatibility, not the original.\n")
+	b.WriteString("- The 'summary' must honestly describe what was modified. If little changed, say so.\n\n")
 
 	b.WriteString("IMPORTANT LANGUAGE RULE:\n")
 	b.WriteString("Detect the primary language of the RESUME. Write ALL text fields ('summary', 'notes', and 'changes') in that SAME language.\n")
 	b.WriteString("For example, if the resume is in French, write everything in French.\n")
 	b.WriteString("If the resume is in English, write everything in English.\n\n")
 
-	b.WriteString("RESUME:\n")
+	b.WriteString("ORIGINAL RESUME:\n")
 	b.WriteString(resumeText)
 	b.WriteString("\n\n")
 
@@ -177,12 +188,18 @@ func (c *Client) buildPrompt(resumeText, jobText string, bm25Signals any) string
 	b.WriteString(jobText)
 	b.WriteString("\n\n")
 
+	if tailoredLatex != "" {
+		b.WriteString("TAILORED RESUME (LaTeX):\n")
+		b.WriteString(tailoredLatex)
+		b.WriteString("\n\n")
+	}
+
 	if bm25Signals != nil {
 		b.WriteString("BM25 KEYWORD ANALYSIS:\n")
-		b.WriteString("The following signals were computed using BM25 (a term-importance ranking algorithm) to compare the resume against the job description.\n")
-		b.WriteString("- top_job_terms: the most important keywords from the job description, ranked by BM25 score (higher = more important to the role)\n")
-		b.WriteString("- missing_job_terms: important job keywords that are ABSENT from the resume — these are gaps the candidate should address\n")
-		b.WriteString("- overlap_terms: keywords present in both the resume and job description (good matches)\n")
+		b.WriteString("The following signals were computed using BM25 to compare the ORIGINAL resume against the job description.\n")
+		b.WriteString("- top_job_terms: the most important keywords from the job description\n")
+		b.WriteString("- missing_job_terms: important job keywords ABSENT from the original resume\n")
+		b.WriteString("- overlap_terms: keywords present in both\n")
 		b.WriteString("- score: overall BM25 relevance score\n\n")
 		serialized, err := json.MarshalIndent(bm25Signals, "", "  ")
 		if err != nil {
@@ -193,13 +210,6 @@ func (c *Client) buildPrompt(resumeText, jobText string, bm25Signals any) string
 		}
 	}
 
-	b.WriteString("Use the BM25 signals to ground your analysis — missing terms should directly inform the change plan.\n\n")
-
-	b.WriteString("The 'summary' should describe:\n")
-	b.WriteString("- What key changes were made to tailor the resume (rephrased bullets, added keywords, reordered sections, etc.)\n")
-	b.WriteString("- Why those changes improve ATS compatibility for this specific role\n")
-	b.WriteString("- If the resume was already very well suited, say so and explain what minor tweaks were made\n\n")
-
 	b.WriteString("Respond with a JSON object in this exact format:\n")
 	b.WriteString(`{
   "ats_report": {
@@ -208,7 +218,7 @@ func (c *Client) buildPrompt(resumeText, jobText string, bm25Signals any) string
     "summary": "<string — 2 to 4 sentences in the RESUME's language>"
   },
   "change_plan": {
-    "changes": ["<string>", ...]
+    "changes": ["<string — describe an ACTUAL change made, not a recommendation>", ...]
   }
 }`)
 
@@ -342,7 +352,9 @@ func buildResumeSpecPrompt(resumeText, jobText string, bm25Signals any, projectC
 	b.WriteString("Keep bullets concise but substantive (about 18-32 words) and impact-oriented.\n")
 	b.WriteString("Use a pattern similar to: action + technology + result/impact.\n")
 	b.WriteString("Bold technical keywords in bullets (languages, frameworks, protocols, tools, platforms).\n")
-	b.WriteString("Use the resume content as the source. Do not invent companies, projects, degrees, dates, or achievements.\n")
+	b.WriteString("Use the resume content as the ONLY source of truth. Do not invent companies, projects, degrees, dates, achievements, or skills.\n")
+	b.WriteString("NEVER add a technology, tool, platform, or skill that is not already present in the original resume.\n")
+	b.WriteString("You may only add synonym forms of existing skills (e.g. 'Golang' if 'Go' is present, 'Cloud' if 'Infonuagique' is present).\n")
 	b.WriteString("Target one page, but prioritize preserving relevant content quality over aggressive trimming.\n")
 	b.WriteString("If space is tight, shorten wording before removing relevant projects or experiences.\n\n")
 
@@ -357,9 +369,19 @@ func buildResumeSpecPrompt(resumeText, jobText string, bm25Signals any, projectC
 	if bm25Signals != nil {
 		b.WriteString("BM25 KEYWORD ANALYSIS:\n")
 		b.WriteString("These signals rank keywords by importance (higher score = more important to the job).\n")
-		b.WriteString("- missing_job_terms: keywords in the job that are ABSENT from the resume — weave these into bullets where truthful\n")
+		b.WriteString("- missing_job_terms: keywords in the job that are ABSENT from the resume — YOU MUST incorporate these\n")
 		b.WriteString("- overlap_terms: keywords already present in both — make sure these stay prominent\n")
 		b.WriteString("- top_job_terms: the most important job keywords overall\n\n")
+
+		b.WriteString("CRITICAL KEYWORD INSTRUCTIONS:\n")
+		b.WriteString("- NEVER invent skills, technologies, or experiences that are NOT in the original resume.\n")
+		b.WriteString("- If a missing keyword is a SYNONYM or alternate name for something already in the resume, add it.\n")
+		b.WriteString("  Examples: 'Go' in resume → add 'Golang'; 'Méthodologies agiles' → add 'Scrum' if context fits; 'Infonuagique' → add 'Cloud'.\n")
+		b.WriteString("- If a missing keyword is genuinely NOT in the candidate's background, do NOT add it. For example, if the resume has no Kubernetes experience, do NOT add Kubernetes just because the job mentions it.\n")
+		b.WriteString("- For overlap_terms: make sure these stay prominent and well-placed.\n")
+		b.WriteString("- Rephrase existing bullets to naturally highlight relevant keywords already present in the resume.\n")
+		b.WriteString("- The goal is to maximize keyword overlap for ATS parsing while staying 100% truthful to the candidate's actual experience.\n\n")
+
 		serialized, err := json.MarshalIndent(bm25Signals, "", "  ")
 		if err != nil {
 			b.WriteString("(BM25 analysis available, failed to serialize)\n\n")

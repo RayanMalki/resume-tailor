@@ -66,6 +66,7 @@ var corpusIDF = map[string]float64{
 	"vite":      6.2,
 	"babel":     5.8,
 	"jquery":    5.0,
+	"nodejs":    4.8,
 	"redux":     5.2,
 	"graphql":   5.5,
 	"rest":      3.8,
@@ -531,10 +532,16 @@ var corpusIDF = map[string]float64{
 }
 
 // lookupIDF returns the IDF value for a given term from the static table.
-// Unknown terms receive defaultCorpusIDF.
+// It also checks canonical synonym forms. Unknown terms receive defaultCorpusIDF.
 func lookupIDF(term string) float64 {
 	if v, ok := corpusIDF[term]; ok {
 		return v
+	}
+	// Try the canonical form (e.g. "go" → "golang")
+	if canon := canonicalize(term); canon != term {
+		if v, ok := corpusIDF[canon]; ok {
+			return v
+		}
 	}
 	return defaultCorpusIDF
 }

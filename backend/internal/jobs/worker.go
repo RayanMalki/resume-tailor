@@ -216,7 +216,7 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 	resumeText := resume.ContentText
 	jobText := runData.JobText
 
-	// 3. Compute BM25 signals (stub for now)
+	// 3. Compute BM25 signals
 	var bm25Signals *bm25.Signals
 	signals, err := bm25.Compute(resumeText, jobText)
 	if err != nil {
@@ -225,23 +225,43 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		bm25Signals = &signals
 	}
 
-	// 4. Generate ATS report and change plan via OpenAI
-	var atsReport ai.ATSReport
-	var changePlan ai.ChangePlan
+	// 4. Generate resume spec + LaTeX FIRST (before the report)
+	// so the report can compare original vs tailored resume.
+	var latexDoc string
+	if w.artifacts != nil && !latexExists {
+		if w.aiClient == nil {
+			return fmt.Errorf("ai client is not configured")
+		}
+		spec, err := w.aiClient.GenerateResumeSpec(ctx, resumeText, jobText, bm25Signals, runData.ProjectControls)
+		if err != nil {
+			return fmt.Errorf("failed to generate resume spec: %w", err)
+		}
+		latexDoc = latex.RenderResume(spec)
+		if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeResumeLatex, latexDoc); err != nil {
+			return fmt.Errorf("failed to store resume latex: %w", err)
+		}
+		latexExists = true
+	} else if latexExists && w.artifacts != nil {
+		existing, err := w.artifacts.GetByRunIDAndType(ctx, runID, artifacts.TypeResumeLatex)
+		if err != nil {
+			return fmt.Errorf("failed to load resume latex: %w", err)
+		}
+		latexDoc = existing.Content
+	}
+
+	// 5. Generate ATS report AFTER the resume so it can compare original vs tailored
 	if !reportExists {
-		atsReport, changePlan, err = w.aiClient.GenerateRunReport(ctx, resumeText, jobText, bm25Signals)
+		atsReport, changePlan, err := w.aiClient.GenerateRunReport(ctx, resumeText, jobText, bm25Signals, latexDoc)
 		if err != nil {
 			return fmt.Errorf("failed to generate run report: %w", err)
 		}
-	}
 
-	reportSignals := bm25.Signals{}
-	if bm25Signals != nil {
-		reportSignals = *bm25Signals
-	}
+		reportSignals := bm25.Signals{}
+		if bm25Signals != nil {
+			reportSignals = *bm25Signals
+		}
 
-	if !reportExists {
-		reportPayload := reportPayload{
+		payload := reportPayload{
 			ReportVersion: 1,
 			GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
 			BM25Signals:   reportSignals,
@@ -249,8 +269,7 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 			ChangePlan:    changePlan,
 		}
 
-		// 5. Marshal to JSON
-		atsReportJSON, err := json.Marshal(reportPayload)
+		atsReportJSON, err := json.Marshal(payload)
 		if err != nil {
 			return fmt.Errorf("failed to marshal ATS report: %w", err)
 		}
@@ -260,7 +279,6 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 			return fmt.Errorf("failed to marshal change plan: %w", err)
 		}
 
-		// 6. Persist into run_reports
 		if w.reportsSvc != nil {
 			if err := w.reportsSvc.UpsertRunReport(ctx, runID, atsReportJSON, changePlanJSON); err != nil {
 				return fmt.Errorf("failed to upsert run report: %w", err)
@@ -268,53 +286,30 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		}
 	}
 
-	if w.artifacts != nil && (!latexExists || (w.pdfEnabled && !pdfExists)) {
-		if w.aiClient == nil {
-			return fmt.Errorf("ai client is not configured")
-		}
-
-		var latexDoc string
-		if latexExists {
-			existing, err := w.artifacts.GetByRunIDAndType(ctx, runID, artifacts.TypeResumeLatex)
-			if err != nil {
-				return fmt.Errorf("failed to load resume latex: %w", err)
-			}
-			latexDoc = existing.Content
+	// 6. Compile PDF
+	if w.pdfEnabled && !pdfExists && w.artifacts != nil && latexDoc != "" {
+		pdfBytes, err := latex.CompilePDF(ctx, w.tectonicBin, latexDoc)
+		if err != nil {
+			slog.Warn("failed to compile resume pdf; continuing without pdf artifact", "run_id", runID, "error", err)
 		} else {
-			spec, err := w.aiClient.GenerateResumeSpec(ctx, resumeText, jobText, bm25Signals, runData.ProjectControls)
-			if err != nil {
-				return fmt.Errorf("failed to generate resume spec: %w", err)
-			}
-			latexDoc = latex.RenderResume(spec)
-			if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeResumeLatex, latexDoc); err != nil {
-				return fmt.Errorf("failed to store resume latex: %w", err)
+			encoded := base64.StdEncoding.EncodeToString(pdfBytes)
+			if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeResumePDF, encoded); err != nil {
+				return fmt.Errorf("failed to store resume pdf: %w", err)
 			}
 		}
+	}
 
-		if w.pdfEnabled && !pdfExists {
-			pdfBytes, err := latex.CompilePDF(ctx, w.tectonicBin, latexDoc)
+	// 7. Generate project reasons (if project controls were used)
+	if needsReasons && !reasonsExists && w.artifacts != nil && latexDoc != "" {
+		reasons, err := w.aiClient.GenerateProjectReasons(ctx, resumeText, jobText, latexDoc, bm25Signals, runData.ProjectControls)
+		if err != nil {
+			slog.Warn("failed to generate project reasons; continuing without project reasons artifact", "run_id", runID, "error", err)
+		} else {
+			reasonsJSON, err := json.Marshal(reasons)
 			if err != nil {
-				// PDF generation is best-effort; keep run successful if LaTeX is ready.
-				slog.Warn("failed to compile resume pdf; continuing without pdf artifact", "run_id", runID, "error", err)
-			} else {
-				encoded := base64.StdEncoding.EncodeToString(pdfBytes)
-				if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeResumePDF, encoded); err != nil {
-					return fmt.Errorf("failed to store resume pdf: %w", err)
-				}
-			}
-		}
-
-		if needsReasons && !reasonsExists {
-			reasons, err := w.aiClient.GenerateProjectReasons(ctx, resumeText, jobText, latexDoc, bm25Signals, runData.ProjectControls)
-			if err != nil {
-				slog.Warn("failed to generate project reasons; continuing without project reasons artifact", "run_id", runID, "error", err)
-			} else {
-				reasonsJSON, err := json.Marshal(reasons)
-				if err != nil {
-					slog.Warn("failed to marshal project reasons; continuing without project reasons artifact", "run_id", runID, "error", err)
-				} else if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeProjectReasons, string(reasonsJSON)); err != nil {
-					slog.Warn("failed to store project reasons artifact; continuing", "run_id", runID, "error", err)
-				}
+				slog.Warn("failed to marshal project reasons; continuing without project reasons artifact", "run_id", runID, "error", err)
+			} else if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeProjectReasons, string(reasonsJSON)); err != nil {
+				slog.Warn("failed to store project reasons artifact; continuing", "run_id", runID, "error", err)
 			}
 		}
 	}

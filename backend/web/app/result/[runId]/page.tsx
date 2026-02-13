@@ -345,15 +345,16 @@ export default function ResultPage() {
             if (status === "queued") {
               updateProgress(10, "Queued \u2014 waiting for worker\u2026");
             } else if (status === "running") {
-              // Check if report exists (indicates BM25 + ATS report are done)
+              // Pipeline: BM25 → Resume Spec/LaTeX → Report
+              // Check if report exists (last step — means resume is done too)
               try {
                 const reportRes = await fetch(`${API_BASE_URL}/v1/runs/${runId}/report`, {
                   credentials: "include",
                 });
                 if (reportRes.ok) {
-                  updateProgress(65, "Generating tailored resume\u2026");
+                  updateProgress(85, "Finalizing report\u2026");
                 } else {
-                  updateProgress(30, "Analyzing keywords & generating ATS report\u2026");
+                  updateProgress(40, "Analyzing keywords & generating tailored resume\u2026");
                 }
               } catch {
                 updateProgress(25, "Processing\u2026");
