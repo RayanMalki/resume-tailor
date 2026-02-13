@@ -74,6 +74,42 @@ type ResumeEducation struct {
 	Details  []string `json:"details"`
 }
 
+// ResumeSpecToText converts a ResumeSpec to plain text for BM25 analysis.
+func ResumeSpecToText(spec ResumeSpec) string {
+	var b strings.Builder
+	b.WriteString(spec.Name + "\n")
+	b.WriteString(spec.Title + "\n")
+	for _, s := range spec.Summary {
+		b.WriteString(s + "\n")
+	}
+	for _, sg := range spec.SkillGroups {
+		b.WriteString(sg.Name + ": " + strings.Join(sg.Items, ", ") + "\n")
+	}
+	for _, s := range spec.Skills {
+		b.WriteString(s + " ")
+	}
+	b.WriteString("\n")
+	for _, e := range spec.Experience {
+		b.WriteString(e.Company + " " + e.Role + "\n")
+		for _, bullet := range e.Bullets {
+			b.WriteString(bullet + "\n")
+		}
+	}
+	for _, p := range spec.Projects {
+		b.WriteString(p.Name + " " + p.Stack + "\n")
+		for _, bullet := range p.Bullets {
+			b.WriteString(bullet + "\n")
+		}
+	}
+	for _, ed := range spec.Education {
+		b.WriteString(ed.School + " " + ed.Degree + "\n")
+		for _, d := range ed.Details {
+			b.WriteString(d + "\n")
+		}
+	}
+	return b.String()
+}
+
 // ReportResponse is the expected JSON structure from OpenAI
 type ReportResponse struct {
 	ATSReport  ATSReport  `json:"ats_report"`
@@ -100,28 +136,22 @@ func NewClientFromEnv(apiKey, model string) (*Client, error) {
 	}, nil
 }
 
-// GenerateRunReport generates an ATS report and change plan using OpenAI.
-// tailoredSpec is the generated resume spec (JSON) so the report can compare original vs tailored.
-func (c *Client) GenerateRunReport(ctx context.Context, resumeText, jobText string, bm25Signals any, tailoredSpec string) (ATSReport, ChangePlan, error) {
-	// Build the prompt
-	prompt := c.buildPrompt(resumeText, jobText, bm25Signals, tailoredSpec)
+// GenerateRunReport generates a lightweight ATS summary and change plan using OpenAI.
+// The ATS score is computed from BM25 (passed in), NOT by the AI.
+// overlapTerms and missingTerms are passed as concise keyword lists for context.
+func (c *Client) GenerateRunReport(ctx context.Context, resumeText, tailoredText string, overlapTerms []string, missingTerms []string, resumeLang string) (ATSReport, ChangePlan, error) {
+	prompt := buildReportPrompt(resumeText, tailoredText, overlapTerms, missingTerms, resumeLang)
 
-	// Call OpenAI
 	req := openai.ChatCompletionNewParams{
 		Model: c.model,
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.SystemMessage(
-				"You are an expert ATS (Applicant Tracking System) analyzer with deep knowledge of " +
-					"how modern applicant tracking systems parse, tokenize, and score resumes. " +
-					"You understand keyword matching, semantic similarity, section weighting, and " +
-					"formatting pitfalls that cause ATS parsers to drop content. " +
-					"You provide structured JSON responses with actionable, specific feedback. " +
-					"CRITICAL: You MUST write ALL output text in the same language as the resume. " +
-					"If the resume is in French, ALL notes, summary, and changes MUST be in French. No exceptions."),
+				"You compare an original resume with its tailored version and produce a concise JSON report. " +
+					"You MUST write ALL output in the language specified. No exceptions."),
 			openai.UserMessage(prompt),
 		},
 		Temperature:         openai.Float(0.3),
-		MaxCompletionTokens: openai.Int(2000),
+		MaxCompletionTokens: openai.Int(800),
 		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
 			OfJSONObject: func() *shared.ResponseFormatJSONObjectParam {
 				p := shared.NewResponseFormatJSONObjectParam()
@@ -144,84 +174,45 @@ func (c *Client) GenerateRunReport(ctx context.Context, resumeText, jobText stri
 		return ATSReport{}, ChangePlan{}, fmt.Errorf("empty content in OpenAI response")
 	}
 
-	// Parse JSON response
 	var reportResp ReportResponse
 	if err := json.Unmarshal([]byte(content), &reportResp); err != nil {
 		return ATSReport{}, ChangePlan{}, fmt.Errorf("failed to parse OpenAI JSON response: %w", err)
 	}
 
-	// Validate the response
-	if reportResp.ATSReport.Score < 0 || reportResp.ATSReport.Score > 1 {
-		return ATSReport{}, ChangePlan{}, fmt.Errorf("invalid ATS score: must be between 0 and 1")
-	}
-
 	return reportResp.ATSReport, reportResp.ChangePlan, nil
 }
 
-func (c *Client) buildPrompt(resumeText, jobText string, bm25Signals any, tailoredSpec string) string {
+func buildReportPrompt(resumeText, tailoredText string, overlapTerms, missingTerms []string, lang string) string {
 	var b strings.Builder
 
-	b.WriteString("You are given the ORIGINAL resume, the JOB DESCRIPTION, and the TAILORED RESUME that was already generated.\n")
-	b.WriteString("Your job is to compare the original vs tailored resume and produce an honest report.\n\n")
+	b.WriteString("Compare the ORIGINAL and TAILORED resumes below. Produce a JSON report.\n\n")
 
-	b.WriteString("Provide:\n")
-	b.WriteString("1. An ATS compatibility score (0.0 to 1.0) for the TAILORED resume against the job\n")
-	b.WriteString("2. Notes explaining the score of the TAILORED resume\n")
-	b.WriteString("3. A change plan listing the ACTUAL changes that were made (compare original vs tailored)\n")
-	b.WriteString("4. A summary (2-4 sentences) describing what actually changed and why\n\n")
+	b.WriteString("LANGUAGE: Write ALL text in " + lang + ". Every string in the JSON must be in " + lang + ".\n\n")
 
-	b.WriteString("CRITICAL RULES:\n")
-	b.WriteString("- The 'changes' list must describe ONLY changes that ACTUALLY exist in the tailored resume.\n")
-	b.WriteString("- Compare original vs tailored carefully. If something was NOT changed, do NOT claim it was.\n")
-	b.WriteString("- If no meaningful changes were made, say so honestly and explain why.\n")
-	b.WriteString("- The 'score' should reflect the TAILORED resume's ATS compatibility, not the original.\n")
-	b.WriteString("- The 'summary' must honestly describe what was modified. If little changed, say so.\n\n")
+	b.WriteString("RULES:\n")
+	b.WriteString("- 'summary': 2-3 sentences describing what ACTUALLY changed (compare the two texts). Be honest — if little changed, say so.\n")
+	b.WriteString("- 'notes': 2-4 short observations about ATS compatibility of the TAILORED resume.\n")
+	b.WriteString("- 'changes': list ONLY changes that ACTUALLY exist between original and tailored. Do NOT invent changes.\n\n")
 
-	b.WriteString("MANDATORY LANGUAGE RULE (DO NOT IGNORE):\n")
-	b.WriteString("Detect the primary language of the RESUME. Write EVERY text field — 'summary', 'notes', AND 'changes' — in that SAME language.\n")
-	b.WriteString("If the resume is in French, ALL output text MUST be in French. Not a single note or change may be in English.\n")
-	b.WriteString("If the resume is in English, ALL output text MUST be in English.\n")
-	b.WriteString("This applies to EVERY string in the JSON response without exception.\n\n")
+	b.WriteString("MATCHED KEYWORDS: " + strings.Join(overlapTerms, ", ") + "\n")
+	b.WriteString("MISSING KEYWORDS: " + strings.Join(missingTerms, ", ") + "\n\n")
 
 	b.WriteString("ORIGINAL RESUME:\n")
 	b.WriteString(resumeText)
 	b.WriteString("\n\n")
 
-	b.WriteString("JOB DESCRIPTION:\n")
-	b.WriteString(jobText)
+	b.WriteString("TAILORED RESUME:\n")
+	b.WriteString(tailoredText)
 	b.WriteString("\n\n")
 
-	if tailoredSpec != "" {
-		b.WriteString("TAILORED RESUME (generated spec):\n")
-		b.WriteString(tailoredSpec)
-		b.WriteString("\n\n")
-	}
-
-	if bm25Signals != nil {
-		b.WriteString("BM25 KEYWORD ANALYSIS:\n")
-		b.WriteString("The following signals were computed using BM25 to compare the ORIGINAL resume against the job description.\n")
-		b.WriteString("- top_job_terms: the most important keywords from the job description\n")
-		b.WriteString("- missing_job_terms: important job keywords ABSENT from the original resume\n")
-		b.WriteString("- overlap_terms: keywords present in both\n")
-		b.WriteString("- score: overall BM25 relevance score\n\n")
-		serialized, err := json.MarshalIndent(bm25Signals, "", "  ")
-		if err != nil {
-			b.WriteString("(BM25 analysis available, failed to serialize)\n\n")
-		} else {
-			b.WriteString(string(serialized))
-			b.WriteString("\n\n")
-		}
-	}
-
-	b.WriteString("Respond with a JSON object in this exact format:\n")
+	b.WriteString("Respond with JSON:\n")
 	b.WriteString(`{
   "ats_report": {
-    "score": <number between 0.0 and 1.0>,
     "notes": ["<string>", ...],
-    "summary": "<string — 2 to 4 sentences in the RESUME's language>"
+    "summary": "<string>"
   },
   "change_plan": {
-    "changes": ["<string — describe an ACTUAL change made, not a recommendation>", ...]
+    "changes": ["<string>", ...]
   }
 }`)
 

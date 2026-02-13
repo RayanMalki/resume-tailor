@@ -216,7 +216,7 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 	resumeText := resume.ContentText
 	jobText := runData.JobText
 
-	// 3. Compute BM25 signals
+	// 3. Compute BM25 signals on ORIGINAL resume
 	var bm25Signals *bm25.Signals
 	signals, err := bm25.Compute(resumeText, jobText)
 	if err != nil {
@@ -226,26 +226,23 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 	}
 
 	// 4. Generate resume spec + LaTeX FIRST (before the report)
-	// so the report can compare original vs tailored resume.
 	var latexDoc string
-	var specJSON string // compact JSON of the spec — much smaller than LaTeX for the report prompt
+	var spec ai.ResumeSpec
+	var specGenerated bool
 	if w.artifacts != nil && !latexExists {
 		if w.aiClient == nil {
 			return fmt.Errorf("ai client is not configured")
 		}
-		spec, err := w.aiClient.GenerateResumeSpec(ctx, resumeText, jobText, bm25Signals, runData.ProjectControls)
+		spec, err = w.aiClient.GenerateResumeSpec(ctx, resumeText, jobText, bm25Signals, runData.ProjectControls)
 		if err != nil {
 			return fmt.Errorf("failed to generate resume spec: %w", err)
 		}
+		specGenerated = true
 		latexDoc = latex.RenderResume(spec)
 		if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeResumeLatex, latexDoc); err != nil {
 			return fmt.Errorf("failed to store resume latex: %w", err)
 		}
 		latexExists = true
-		// Serialize the spec for the report prompt (much smaller than full LaTeX)
-		if specBytes, err := json.Marshal(spec); err == nil {
-			specJSON = string(specBytes)
-		}
 	} else if latexExists && w.artifacts != nil {
 		existing, err := w.artifacts.GetByRunIDAndType(ctx, runID, artifacts.TypeResumeLatex)
 		if err != nil {
@@ -254,22 +251,64 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		latexDoc = existing.Content
 	}
 
-	// 5. Generate ATS report AFTER the resume so it can compare original vs tailored
+	// 5. Compute BM25 on TAILORED resume and generate report
 	if !reportExists {
-		atsReport, changePlan, err := w.aiClient.GenerateRunReport(ctx, resumeText, jobText, bm25Signals, specJSON)
+		// Compute BM25 on the tailored resume text for an accurate score
+		var tailoredSignals bm25.Signals
+		if specGenerated {
+			tailoredText := ai.ResumeSpecToText(spec)
+			ts, err := bm25.Compute(tailoredText, jobText)
+			if err != nil {
+				slog.Warn("BM25 computation on tailored resume failed", "error", err, "run_id", runID)
+				// Fall back to original signals
+				if bm25Signals != nil {
+					tailoredSignals = *bm25Signals
+				}
+			} else {
+				tailoredSignals = ts
+			}
+		} else if bm25Signals != nil {
+			tailoredSignals = *bm25Signals
+		}
+
+		// Compute ATS score from BM25: overlap / (overlap + missing)
+		overlapCount := float64(len(tailoredSignals.OverlapTerms))
+		missingCount := float64(len(tailoredSignals.MissingJobTerms))
+		atsScore := 0.0
+		if overlapCount+missingCount > 0 {
+			atsScore = overlapCount / (overlapCount + missingCount)
+		}
+
+		// Detect resume language from spec (or default to "French")
+		resumeLang := "French"
+		if specGenerated && spec.Language != "" {
+			resumeLang = spec.Language
+		}
+
+		// Collect term names for the lean AI prompt
+		overlapNames := tailoredSignals.OverlapTerms
+		missingNames := make([]string, 0, len(tailoredSignals.MissingJobTerms))
+		for _, t := range tailoredSignals.MissingJobTerms {
+			missingNames = append(missingNames, t.Term)
+		}
+
+		// Generate the qualitative report (summary + notes + changes) via a lean AI call
+		tailoredText := ""
+		if specGenerated {
+			tailoredText = ai.ResumeSpecToText(spec)
+		}
+		atsReport, changePlan, err := w.aiClient.GenerateRunReport(ctx, resumeText, tailoredText, overlapNames, missingNames, resumeLang)
 		if err != nil {
 			return fmt.Errorf("failed to generate run report: %w", err)
 		}
 
-		reportSignals := bm25.Signals{}
-		if bm25Signals != nil {
-			reportSignals = *bm25Signals
-		}
+		// Set the score from BM25 (not from AI)
+		atsReport.Score = atsScore
 
 		payload := reportPayload{
 			ReportVersion: 1,
 			GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
-			BM25Signals:   reportSignals,
+			BM25Signals:   tailoredSignals,
 			ATSReport:     atsReport,
 			ChangePlan:    changePlan,
 		}

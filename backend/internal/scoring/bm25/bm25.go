@@ -116,13 +116,20 @@ func Compute(resumeText, jobText string) (Signals, error) {
 // stripAccents removes diacritics/accents from text using Unicode NFD
 // decomposition (e.g. "développement" → "developpement", "résumé" → "resume").
 // This allows French and other accented text to match English IDF table terms.
+// It also strips modifier letter accents (ˊ U+02CA, ˋ U+02CB, etc.) which
+// some PDF extractors produce instead of proper combining accents.
 func stripAccents(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	for _, r := range norm.NFD.String(s) {
 		// After NFD decomposition, accents become separate combining marks.
-		// Keep only non-combining characters (base letters/digits).
 		if unicode.Is(unicode.Mn, r) { // Mn = Mark, Nonspacing (combining accents)
+			continue
+		}
+		// Also strip modifier letter accents (U+02B0–U+02FF) which some
+		// PDF extractors emit instead of proper combining marks.
+		// Includes ˊ (U+02CA), ˋ (U+02CB), ˆ (U+02C6), etc.
+		if r >= 0x02B0 && r <= 0x02FF {
 			continue
 		}
 		b.WriteRune(r)
@@ -185,10 +192,19 @@ var synonyms = map[string]string{
 	"api":  "api",
 	"apis": "api",
 	// Tests automatisés / automated tests
-	"automatise":  "automatise",
-	"automatises": "automatise",
-	"automatisee": "automatise",
+	"automatise":   "automatise",
+	"automatises":  "automatise",
+	"automatisee":  "automatise",
 	"automatisees": "automatise",
+	// Protect tech terms that naturally end in 's' from depluralization
+	"jenkins":  "jenkins",
+	"redis":    "redis",
+	"travis":   "travis",
+	"atlas":    "atlas",
+	"pandas":   "pandas",
+	"keras":    "keras",
+	"express": "express",
+	// "postgres" already defined above
 }
 
 func canonicalize(token string) string {
@@ -199,47 +215,32 @@ func canonicalize(token string) string {
 }
 
 // depluralize applies simple plural→singular normalization for English and French.
-// This is intentionally conservative — only strip suffixes that are safe and common.
-// We check the synonym table first because e.g. "apis" should become "api" not "api"→"api".
+// Only strips trailing "-s". We never strip "-es" (2 chars) because French singulars
+// keep the "e" (e.g. "techniques"→"technique", NOT "techniqu").
 func depluralize(token string) string {
 	n := len(token)
 	if n < 4 {
 		return token // too short to safely strip
 	}
 
-	// Don't strip if the result is a known synonym (handle separately)
+	// Don't touch known tech terms / synonyms — they're already canonical
 	if _, ok := synonyms[token]; ok {
 		return token
 	}
 
-	// French: -aux → -al (e.g. "reseaux" → "reseau") — skip, too risky
-	// French: -ées → -ee, -és → -e  (e.g. "automatisees" → "automatisee")
-	// English/French: -es → strip (e.g. "agiles"→"agile", "microservices"→"microservice")
-	// English/French: -s → strip (e.g. "apis"→"api", "tests"→"test")
-
-	// Try -es first (more specific)
-	if n > 4 && strings.HasSuffix(token, "es") {
-		candidate := token[:n-2]
-		// Only strip -es if the base is long enough and not ending in 's' already
-		if len(candidate) >= 3 && !strings.HasSuffix(candidate, "s") {
-			return candidate
-		}
-		// Otherwise try just -s
-		candidate = token[:n-1]
-		if len(candidate) >= 3 {
-			return candidate
-		}
+	// Only strip trailing -s
+	if !strings.HasSuffix(token, "s") {
+		return token
+	}
+	// Don't strip if it ends in "ss" (e.g. "process", "class")
+	if strings.HasSuffix(token, "ss") {
 		return token
 	}
 
-	// Try -s
-	if strings.HasSuffix(token, "s") {
-		candidate := token[:n-1]
-		if len(candidate) >= 3 {
-			return candidate
-		}
+	candidate := token[:n-1]
+	if len(candidate) >= 3 {
+		return candidate
 	}
-
 	return token
 }
 
@@ -351,6 +352,116 @@ var stopwords = map[string]struct{}{
 	"ideal": {}, "candidate": {}, "applicant": {}, "apply": {}, "equal": {},
 	"employer": {}, "benefits": {}, "salary": {}, "competitive": {},
 
+	// ── Additional English generic words common in job postings ────────
+	"knowledge": {}, "understanding": {}, "familiar": {}, "familiarity": {},
+	"support": {}, "supporting": {}, "supported": {},
+	"allow": {}, "allowing": {}, "allowed": {},
+	"another": {}, "area": {}, "areas": {},
+	"asset": {}, "assets": {},
+	"available": {}, "availability": {},
+	"based": {}, "basis": {},
+	"best": {}, "better": {},
+	"build": {}, "building": {},
+	"business": {}, "career": {},
+	"challenge": {}, "challenges": {}, "challenging": {},
+	"change": {}, "changes": {},
+	"complete": {}, "completing": {}, "completion": {},
+	"create": {}, "creating": {},
+	"current": {}, "currently": {},
+	"day": {}, "days": {},
+	"deliver": {}, "delivering": {},
+	"description": {},
+	"different": {}, "diverse": {}, "diversity": {},
+	"effort": {}, "efforts": {},
+	"ensure": {}, "ensuring": {},
+	"every": {}, "everyone": {},
+	"first": {}, "follow": {}, "following": {},
+	"full": {}, "fully": {},
+	"given": {}, "great": {},
+	"grow": {}, "growing": {},
+	"help": {}, "helping": {},
+	"high": {}, "highly": {},
+	"include": {}, "included": {}, "includes": {},
+	"key": {}, "keep": {},
+	"know": {}, "known": {},
+	"large": {}, "learn": {}, "learning": {},
+	"like": {}, "long": {},
+	"make": {}, "making": {},
+	"manage": {}, "managing": {},
+	"many": {}, "much": {},
+	"need": {}, "needed": {}, "needs": {},
+	"new": {}, "next": {},
+	"offer": {}, "offering": {}, "offers": {},
+	"open": {}, "order": {},
+	"part": {}, "people": {}, "person": {},
+	"place": {}, "please": {},
+	"provide": {}, "providing": {}, "provided": {},
+	"range": {},
+	"related": {}, "relevant": {},
+	"responsible": {}, "responsibility": {},
+	"right": {},
+	"set": {}, "several": {},
+	"share": {}, "sharing": {},
+	"show": {}, "significant": {},
+	"similar": {}, "since": {},
+	"skill": {}, "skills": {},
+	"start": {}, "starting": {},
+	"success": {}, "successful": {}, "successfully": {},
+	"take": {}, "taking": {},
+	"think": {}, "thinking": {},
+	"time": {}, "today": {},
+	"together": {},
+	"top": {}, "toward": {}, "towards": {},
+	"true": {}, "turn": {},
+	"understand": {},
+	"use": {}, "used": {}, "using": {}, "utilize": {},
+	"value": {}, "values": {},
+	"want": {}, "way": {}, "ways": {},
+	"world": {},
+	"able": {}, "along": {}, "always": {}, "become": {},
+	// "being" already in standard English stopwords
+	"bring": {}, "brought": {},
+	"come": {}, "comes": {},
+	"consider": {}, "continue": {},
+	"directly": {},
+	"even": {}, "expect": {}, "expected": {},
+	"find": {},
+	"good": {},
+	"important": {}, "improve": {},
+	"information": {},
+	"involve": {}, "involved": {},
+	"look": {},
+	// "looking" already in job-posting boilerplate
+	"move": {}, "moving": {},
+	"often": {},
+	"plan": {}, "planning": {},
+	"play": {}, "possible": {},
+	"process": {},
+	"project": {}, "projects": {},
+	"put": {},
+	"really": {},
+	"report": {}, "reporting": {},
+	"run": {}, "running": {},
+	"see": {},
+	"serve": {}, "serving": {},
+	"specific": {},
+	"still": {},
+	// "such" already in standard English stopwords
+	"thing": {}, "things": {},
+	"already": {},
+	"focus": {}, "focused": {},
+	"level": {},
+	"enable": {}, "enabling": {},
+	"act": {}, "acting": {},
+	"positive": {},
+	"various": {},
+	"thrive": {},
+	"respect": {},
+	"inspire": {}, "inspiring": {},
+	"confirm": {},
+	"via": {},
+	"maximum": {},
+
 	// ── French stopwords ──────────────────────────────────────────────
 	// Common French function words that add noise to BM25 signals.
 	// Note: accented forms are stripped by tokenizer, so "é"→"e", "à"→"a", etc.
@@ -396,9 +507,11 @@ var stopwords = map[string]struct{}{
 	"apprentissage": {}, "apprendre": {},
 	"contenu": {}, "contenus": {},
 	"personnalises": {}, "personnalise": {},
-	"favoriser": {}, "continue": {}, "enrichir": {},
+	"favoriser": {}, "enrichir": {},
+	// "continue" already in English section
 	"disponibles": {}, "disponible": {},
-	"possedant": {}, "differentes": {}, "different": {},
+	"possedant": {}, "differentes": {},
+	// "different" already in English section
 	"expertises": {}, "expertise": {}, "experiences": {},
 	"profils": {}, "diversifies": {},
 	"points": {}, "vue": {},
@@ -411,15 +524,18 @@ var stopwords = map[string]struct{}{
 	"secteur": {}, "activite": {},
 	"curiosite": {}, "fort": {}, "esprit": {},
 	"rigueur": {}, "travail": {},
-	"completement": {}, "completion": {},
+	"completement": {},
+	// "completion" already in English section
 	"connexe": {}, "etudes": {},
 	"relever": {}, "defis": {},
 	"supporter": {}, "croissance": {},
-	"confirmer": {}, "livrables": {}, "via": {},
+	"confirmer": {}, "livrables": {},
+	// "via" already in English section
 	"integrer": {}, "inspirante": {}, "respecte": {},
 	"meilleures": {}, "pratiques": {},
 	"innovantes": {}, "innovante": {},
-	"maximum": {}, "valeur": {},
+	// "maximum" already in English section
+	"valeur": {},
 	"divers": {}, "partenaires": {}, "affaires": {},
 
 	// ── French generic verbs/nouns that are not ATS-relevant ──────────
@@ -449,11 +565,33 @@ var stopwords = map[string]struct{}{
 	"resultats": {}, "resultat": {},
 	"processus": {}, "procedure": {}, "procedures": {},
 	"gerer": {}, "gerant": {},
+	"tant": {}, // "en tant que"
+	"vient": {}, "venir": {},
+	"supportent": {}, "supporte": {},
+	// "supporter" already defined above
+	// "description" already in English section
+	"concernant": {}, "concerne": {},
+	"permettre": {}, "permettant": {},
+	"doit": {}, "doivent": {},
+	"presente": {}, "presenter": {},
+	// "assurer", "assurant" already defined above
+	"souhaite": {}, "souhaiter": {},
+	"capable": {}, "capacite": {},
+	"necessaire": {}, "necessaires": {},
+	// "important" already in English section
+	"importante": {},
+	"essentiels": {}, "essentiel": {}, "essentielle": {},
+	"specifique": {}, "specifiques": {},
+	"pertinent": {}, "pertinente": {}, "pertinents": {},
+	"contribuer": {},
+	"repondre": {},
+	"ameliorer": {},
 
 	// ── City names (not useful for ATS keyword matching) ──────────────
 	"montreal": {}, "toronto": {}, "vancouver": {}, "ottawa": {}, "quebec": {},
 	"paris": {}, "lyon": {}, "marseille": {}, "toulouse": {}, "bordeaux": {},
-	"new": {}, "york": {}, "san": {}, "francisco": {}, "london": {},
+	// "new" already in English section
+	"york": {}, "san": {}, "francisco": {}, "london": {},
 	"berlin": {}, "remote": {},
 }
 
