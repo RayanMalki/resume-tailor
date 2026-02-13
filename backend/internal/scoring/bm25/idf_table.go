@@ -471,6 +471,63 @@ var corpusIDF = map[string]float64{
 	"accessibility": 4.5,
 	"wcag":          6.2,
 	"aria":          6.2,
+
+	// ── French equivalents of common English terms ─────────────────────
+	// These map French technical/professional vocabulary to the same IDF
+	// values as their English counterparts, so they don't get the default
+	// 7.0 ("rare/important") score. All accent-stripped.
+	"developpement":   1.8, // développement = development
+	"developpeur":     2.5, // développeur = developer
+	"logiciel":        2.0, // = software
+	"logiciels":       2.2, // = softwares
+	"ingenieur":       2.2, // ingénieur = engineer
+	"ingenierie":      2.5, // ingénierie = engineering
+	"informatique":    2.5, // = computer science / IT
+	"conception":      2.5, // = design
+	"gestion":         2.2, // = management
+	"securite":        3.0, // sécurité = security
+	"donnees":         2.0, // données = data
+	"reseau":          4.2, // réseau = network
+	"reseaux":         4.2, // réseaux = networks
+	"deploiement":     3.5, // déploiement = deployment
+	"amelioration":    3.0, // amélioration = improvement
+	"fonctionnalite":  3.5, // fonctionnalité = functionality
+	"fonctionnalites": 3.5,
+	"automatisation":  3.5, // = automation
+	"optimisation":    3.8, // = optimization
+	"maintenance":     3.0, // = maintenance
+	"mise":            2.5, // (as in "mise en place", "mise en production")
+	"place":           3.0,
+	"oeuvre":          3.5, // (as in "mise en oeuvre")
+	"utilisateur":     3.0, // = user
+	"utilisateurs":    3.2,
+	"client":          2.8, // = client/customer
+	"clients":         3.0,
+	"serveur":         4.0, // = server
+	"base":            3.0, // (as in "base de données")
+	"test":            3.2, // = test
+	"tests":           3.2,
+	"unitaire":        3.8, // = unit (test)
+	"unitaires":       3.8,
+	// "integration" already in English section (3.2)
+	"equipe":     2.5, // équipe = team (low IDF, generic)
+	"projet":     2.5, // = project
+	"projets":    2.5,
+	"technique":  2.5, // = technical
+	"techniques": 2.5,
+	"methode":    3.5, // méthode = method
+	"methodes":   3.5,
+	// "agile" already in English section (3.5)
+	"performant":   3.8, // = performant/high-performance
+	"performante":  3.8,
+	"qualite":      3.2, // qualité = quality
+	"outil":        3.2, // = tool
+	"outils":       2.8, // = tools
+	"formation":    3.5, // = education/training
+	"diplome":      2.8, // diplôme = degree
+	"licence":      3.5, // = bachelor's degree (FR)
+	"maitrise":     3.5, // maîtrise = master's degree (FR/QC)
+	"baccalaureat": 3.0, // baccalauréat = bachelor's (QC) / high school diploma (FR)
 }
 
 // lookupIDF returns the IDF value for a given term from the static table.

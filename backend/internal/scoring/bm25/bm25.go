@@ -240,6 +240,7 @@ var stopwords = map[string]struct{}{
 	"ses": {}, "son": {}, "sa": {}, "nos": {}, "notre": {}, "vos": {}, "votre": {},
 	"leur": {}, "leurs": {}, "ils": {}, "elles": {}, "nous": {}, "vous": {},
 	"mon": {}, "ma": {}, "mes": {}, "ton": {}, "ta": {}, "tes": {},
+	"tu": {}, "te": {}, "toi": {},
 	"ne": {}, "se": {}, "si": {}, "ya": {}, "ca": {}, "cet": {}, "cette": {},
 	"ici": {}, "entre": {}, "comme": {}, "plus": {}, "moins": {}, "tres": {},
 	"bien": {}, "aussi": {}, "meme": {}, "autre": {}, "autres": {},
@@ -247,7 +248,10 @@ var stopwords = map[string]struct{}{
 	"sera": {}, "seront": {}, "etait": {}, "etaient": {},
 	"chez": {}, "dont": {}, "depuis": {}, "vers": {}, "sans": {},
 	"alors": {}, "donc": {}, "encore": {}, "deja": {}, "apres": {},
-	"avant": {}, "sous": {},
+	"avant": {}, "sous": {}, "sommes": {}, "etes": {}, "suis": {},
+	"quand": {}, "lorsque": {}, "pendant": {}, "chaque": {},
+	"peu": {}, "beaucoup": {}, "trop": {}, "assez": {},
+	"ans": {}, "mois": {}, "jour": {}, "jours": {},
 
 	// French job-posting boilerplate (accent-stripped)
 	// Note: "candidate" and "experience" already defined in English section.
@@ -256,6 +260,21 @@ var stopwords = map[string]struct{}{
 	"profil": {}, "candidat": {}, "postuler": {},
 	"salaire": {}, "avantages": {}, "environnement": {},
 	"annees": {}, "niveau": {},
+	"recrutement": {}, "recruter": {}, "agence": {},
+	"talents": {}, "talent": {}, "collegues": {}, "collegue": {},
+	"diversite": {}, "inclusion": {}, "inclusif": {}, "inclusive": {},
+	"ensemble": {}, "participer": {}, "participation": {},
+	"anglais": {}, "francais": {}, "bilingue": {},
+	"offre": {}, "offrons": {}, "proposons": {},
+	"rejoindre": {}, "rejoignez": {},
+	"passionnee": {}, "passionne": {},
+	"dynamique": {}, "motivee": {}, "motive": {},
+
+	// ── City names (not useful for ATS keyword matching) ──────────────
+	"montreal": {}, "toronto": {}, "vancouver": {}, "ottawa": {}, "quebec": {},
+	"paris": {}, "lyon": {}, "marseille": {}, "toulouse": {}, "bordeaux": {},
+	"new": {}, "york": {}, "san": {}, "francisco": {}, "london": {},
+	"berlin": {}, "remote": {},
 }
 
 func isStopword(token string) bool {

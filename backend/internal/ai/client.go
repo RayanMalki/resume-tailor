@@ -165,10 +165,9 @@ func (c *Client) buildPrompt(resumeText, jobText string, bm25Signals any) string
 	b.WriteString("4. A human-readable summary (2-4 sentences) explaining what was changed in the tailored resume and why\n\n")
 
 	b.WriteString("IMPORTANT LANGUAGE RULE:\n")
-	b.WriteString("Detect the primary language of the RESUME. Write the 'summary' field in that SAME language.\n")
-	b.WriteString("For example, if the resume is in French, write the summary in French.\n")
-	b.WriteString("If the resume is in English, write the summary in English.\n")
-	b.WriteString("The 'notes' and 'changes' fields should always be in English.\n\n")
+	b.WriteString("Detect the primary language of the RESUME. Write ALL text fields ('summary', 'notes', and 'changes') in that SAME language.\n")
+	b.WriteString("For example, if the resume is in French, write everything in French.\n")
+	b.WriteString("If the resume is in English, write everything in English.\n\n")
 
 	b.WriteString("RESUME:\n")
 	b.WriteString(resumeText)
