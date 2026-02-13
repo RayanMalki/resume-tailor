@@ -6,151 +6,39 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"regexp"
 	"strings"
+
+	"github.com/ledongthuc/pdf"
 )
 
 // ── PDF text extraction ────────────────────────────────────────────
-// Lightweight PDF text extractor that handles the most common
-// PDF structures (FlateDecode streams with text operators).
-// This covers the vast majority of resume PDFs without pulling in
-// a heavy C-binding PDF library.
+// Uses github.com/ledongthuc/pdf for proper PDF parsing including
+// FlateDecode decompression, CMap font mapping, and text operators.
 
 func extractTextFromPDF(data []byte) (string, error) {
-	content := string(data)
+	reader, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return "", fmt.Errorf("failed to parse PDF: %w", err)
+	}
 
-	// Find all stream...endstream blocks
-	var texts []string
-	streamRe := regexp.MustCompile(`(?s)stream\r?\n(.*?)endstream`)
-	matches := streamRe.FindAllStringSubmatch(content, -1)
-
-	for _, match := range matches {
-		if len(match) < 2 {
+	var buf strings.Builder
+	numPages := reader.NumPage()
+	for i := 1; i <= numPages; i++ {
+		page := reader.Page(i)
+		if page.V.IsNull() {
 			continue
 		}
-		raw := match[1]
-
-		// Try to decompress FlateDecode streams
-		decompressed, err := flateDecompress([]byte(raw))
+		text, err := page.GetPlainText(nil)
 		if err != nil {
-			// Not compressed or decompression failed — try as raw text
-			decompressed = []byte(raw)
+			continue // skip pages that fail
 		}
-
-		// Extract text from PDF operators (Tj, TJ, ')
-		extracted := extractPDFTextOperators(string(decompressed))
-		if extracted != "" {
-			texts = append(texts, extracted)
+		if buf.Len() > 0 {
+			buf.WriteString("\n")
 		}
+		buf.WriteString(text)
 	}
 
-	if len(texts) == 0 {
-		// Fallback: try to extract any readable text
-		return extractReadableText(data), nil
-	}
-
-	return strings.Join(texts, "\n"), nil
-}
-
-func flateDecompress(data []byte) ([]byte, error) {
-	// Try zlib decompression (FlateDecode in PDF uses zlib)
-	// Import compress/flate is only available in the actual code,
-	// but since we can't add imports without the file, let's use
-	// a simpler approach.
-	reader := bytes.NewReader(data)
-
-	// Check for zlib header (first two bytes)
-	if len(data) < 2 {
-		return nil, fmt.Errorf("too short for zlib")
-	}
-
-	// Zlib headers: 0x78 0x01, 0x78 0x5E, 0x78 0x9C, 0x78 0xDA
-	if data[0] != 0x78 {
-		return nil, fmt.Errorf("not zlib compressed")
-	}
-
-	_ = reader // We'll use the import-free version below
-	return nil, fmt.Errorf("not compressed")
-}
-
-// extractPDFTextOperators extracts text from PDF content stream operators.
-func extractPDFTextOperators(content string) string {
-	var result strings.Builder
-
-	// Match Tj operator: (text) Tj
-	tjRe := regexp.MustCompile(`\(([^)]*)\)\s*Tj`)
-	for _, m := range tjRe.FindAllStringSubmatch(content, -1) {
-		if len(m) >= 2 {
-			result.WriteString(unescapePDFString(m[1]))
-			result.WriteString(" ")
-		}
-	}
-
-	// Match TJ operator: [(text) num (text)] TJ
-	tjArrayRe := regexp.MustCompile(`\[([^\]]*)\]\s*TJ`)
-	for _, m := range tjArrayRe.FindAllStringSubmatch(content, -1) {
-		if len(m) >= 2 {
-			innerRe := regexp.MustCompile(`\(([^)]*)\)`)
-			for _, inner := range innerRe.FindAllStringSubmatch(m[1], -1) {
-				if len(inner) >= 2 {
-					result.WriteString(unescapePDFString(inner[1]))
-				}
-			}
-			result.WriteString(" ")
-		}
-	}
-
-	// Match ' operator: (text) '
-	quoteRe := regexp.MustCompile(`\(([^)]*)\)\s*'`)
-	for _, m := range quoteRe.FindAllStringSubmatch(content, -1) {
-		if len(m) >= 2 {
-			result.WriteString(unescapePDFString(m[1]))
-			result.WriteString("\n")
-		}
-	}
-
-	return strings.TrimSpace(result.String())
-}
-
-func unescapePDFString(s string) string {
-	s = strings.ReplaceAll(s, "\\n", "\n")
-	s = strings.ReplaceAll(s, "\\r", "\r")
-	s = strings.ReplaceAll(s, "\\t", "\t")
-	s = strings.ReplaceAll(s, "\\(", "(")
-	s = strings.ReplaceAll(s, "\\)", ")")
-	s = strings.ReplaceAll(s, "\\\\", "\\")
-	return s
-}
-
-// extractReadableText is a last-resort fallback that pulls printable ASCII
-// runs from binary PDF data.
-func extractReadableText(data []byte) string {
-	var result strings.Builder
-	var current strings.Builder
-
-	for _, b := range data {
-		if b >= 32 && b < 127 {
-			current.WriteByte(b)
-		} else {
-			if current.Len() > 3 {
-				result.WriteString(current.String())
-				result.WriteString(" ")
-			}
-			current.Reset()
-		}
-	}
-	if current.Len() > 3 {
-		result.WriteString(current.String())
-	}
-
-	// Clean up common PDF artifacts
-	text := result.String()
-	text = regexp.MustCompile(`\b(endobj|obj|stream|endstream|xref|trailer)\b`).ReplaceAllString(text, "")
-	text = regexp.MustCompile(`/[A-Z][a-zA-Z]+`).ReplaceAllString(text, "") // /FontName etc.
-	text = regexp.MustCompile(`\d+ \d+ R`).ReplaceAllString(text, "")       // object references
-	text = regexp.MustCompile(`\s+`).ReplaceAllString(text, " ")
-
-	return strings.TrimSpace(text)
+	return strings.TrimSpace(buf.String()), nil
 }
 
 // ── DOCX text extraction ───────────────────────────────────────────
