@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import TopBar from "../components/TopBar";
+import { useToast } from "../components/Toast";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 
@@ -11,6 +12,7 @@ const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
 
 export default function ResumePage() {
   const router = useRouter();
+  const { toast } = useToast();
   const [resumeText, setResumeText] = useState("");
   const [title, setTitle] = useState("My Resume");
   const [error, setError] = useState<string | null>(null);
@@ -78,13 +80,16 @@ export default function ResumePage() {
       if (data.title) {
         setTitle(data.title);
       }
+      toast("Resume text extracted successfully");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to upload file");
+      const msg = err instanceof Error ? err.message : "Failed to upload file";
+      setError(msg);
+      toast(msg, "error");
       setUploadedFileName(null);
     } finally {
       setUploading(false);
     }
-  }, [router]);
+  }, [router, toast]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();

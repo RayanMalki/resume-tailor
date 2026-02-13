@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import TopBar from "../../components/TopBar";
+import { useToast } from "../../components/Toast";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 
@@ -119,6 +120,7 @@ export default function ResultPage() {
   const router = useRouter();
   const params = useParams<{ runId: string }>();
   const runId = params.runId;
+  const { toast } = useToast();
 
   // Core data
   const [latex, setLatex] = useState<string | null>(null);
@@ -434,6 +436,7 @@ export default function ResultPage() {
   const handleCopy = async () => {
     if (!latex) return;
     await navigator.clipboard.writeText(latex);
+    toast("LaTeX copied to clipboard");
   };
 
   const handleDownloadPDF = async () => {
@@ -463,8 +466,11 @@ export default function ResultPage() {
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+      toast("PDF downloaded");
     } catch (err) {
-      setPdfError(err instanceof Error ? err.message : "Failed to download PDF");
+      const msg = err instanceof Error ? err.message : "Failed to download PDF";
+      setPdfError(msg);
+      toast(msg, "error");
     } finally {
       setPdfLoading(false);
     }

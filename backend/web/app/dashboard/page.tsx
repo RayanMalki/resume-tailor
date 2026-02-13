@@ -104,12 +104,16 @@ function StatSkeleton() {
 
 /* ── Main page ────────────────────────────────────────────────── */
 
+const PAGE_SIZE = 20;
+
 export default function DashboardPage() {
   const router = useRouter();
   const [runs, setRuns] = useState<RunItem[]>([]);
   const [resumes, setResumes] = useState<ResumeItem[]>([]);
   const [scores, setScores] = useState<ScorePoint[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
 
   useEffect(() => {
     const boot = async () => {
@@ -121,8 +125,8 @@ export default function DashboardPage() {
 
       try {
         const [runsRes, resumesRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/v1/runs?limit=20`, { credentials: "include" }),
-          fetch(`${API_BASE_URL}/v1/resumes?limit=20`, { credentials: "include" })
+          fetch(`${API_BASE_URL}/v1/runs?limit=${PAGE_SIZE}`, { credentials: "include" }),
+          fetch(`${API_BASE_URL}/v1/resumes?limit=${PAGE_SIZE}`, { credentials: "include" })
         ]);
 
         const runList = runsRes.ok ? ((await runsRes.json()) as RunItem[]) : [];
@@ -130,6 +134,7 @@ export default function DashboardPage() {
 
         setRuns(runList);
         setResumes(resumeList);
+        setHasMore(runList.length >= PAGE_SIZE);
 
         const latestRuns = runList.slice(0, 8);
         const scoreResults = await Promise.allSettled(
@@ -162,6 +167,22 @@ export default function DashboardPage() {
 
     boot();
   }, [router]);
+
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/v1/runs?limit=${PAGE_SIZE}&offset=${runs.length}`,
+        { credentials: "include" }
+      );
+      if (!res.ok) return;
+      const moreRuns = (await res.json()) as RunItem[];
+      setRuns((prev) => [...prev, ...moreRuns]);
+      setHasMore(moreRuns.length >= PAGE_SIZE);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const stats = useMemo(() => {
     const jobCount = runs.length;
@@ -232,36 +253,54 @@ export default function DashboardPage() {
                   No runs yet. Start your first job to see it here.
                 </div>
               ) : (
-                runs.map((run) => {
-                  const runId = run.ID || run.id || "";
-                  const status = (run.Status || run.status || "queued").toString();
-                  const createdRaw = run.CreatedAt || run.createdAt;
-                  const created = createdRaw
-                    ? new Date(createdRaw).toLocaleString()
-                    : "Just now";
-                  const jobText = (run.JobText || run.jobText || "").replace(/\s+/g, " ").trim();
-                  const snippet = jobText ? `${jobText.slice(0, 80)}${jobText.length > 80 ? "\u2026" : ""}` : "Job listing";
+                <>
+                  {runs.map((run) => {
+                    const runId = run.ID || run.id || "";
+                    const status = (run.Status || run.status || "queued").toString();
+                    const createdRaw = run.CreatedAt || run.createdAt;
+                    const created = createdRaw
+                      ? new Date(createdRaw).toLocaleString()
+                      : "Just now";
+                    const jobText = (run.JobText || run.jobText || "").replace(/\s+/g, " ").trim();
+                    const snippet = jobText ? `${jobText.slice(0, 80)}${jobText.length > 80 ? "\u2026" : ""}` : "Job listing";
 
-                  return (
+                    return (
+                      <button
+                        key={runId}
+                        onClick={() => router.push(`/result/${runId}`)}
+                        className="flex w-full items-center justify-between gap-3 rounded-2xl border border-white/10 bg-ink-950/70 px-4 py-4 text-left transition hover:border-ember-400/60 hover:bg-ink-950"
+                        aria-label={`View run: ${snippet}`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-white">{snippet}</p>
+                          <p className="mt-1 text-xs text-slate-400">{created}</p>
+                        </div>
+                        <div className="flex flex-shrink-0 items-center gap-3">
+                          <span className="rounded-full border border-ember-500/60 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-ember-300">
+                            {status}
+                          </span>
+                          <span className="hidden text-xs text-ember-300 sm:inline">View</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {hasMore && (
                     <button
-                      key={runId}
-                      onClick={() => router.push(`/result/${runId}`)}
-                      className="flex w-full items-center justify-between gap-3 rounded-2xl border border-white/10 bg-ink-950/70 px-4 py-4 text-left transition hover:border-ember-400/60 hover:bg-ink-950"
-                      aria-label={`View run: ${snippet}`}
+                      onClick={loadMore}
+                      disabled={loadingMore}
+                      className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-ink-950/40 px-4 py-3 text-sm font-semibold text-slate-300 transition hover:border-ember-400/60 hover:text-ember-200 disabled:opacity-70"
                     >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-white">{snippet}</p>
-                        <p className="mt-1 text-xs text-slate-400">{created}</p>
-                      </div>
-                      <div className="flex flex-shrink-0 items-center gap-3">
-                        <span className="rounded-full border border-ember-500/60 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-ember-300">
-                          {status}
-                        </span>
-                        <span className="hidden text-xs text-ember-300 sm:inline">View</span>
-                      </div>
+                      {loadingMore ? (
+                        <>
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300/30 border-t-slate-300" />
+                          Loading&hellip;
+                        </>
+                      ) : (
+                        "Load more"
+                      )}
                     </button>
-                  );
-                })
+                  )}
+                </>
               )}
             </div>
           </div>

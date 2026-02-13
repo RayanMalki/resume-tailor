@@ -35,11 +35,6 @@ func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes
 		r.Get("/", handlers.RootHandler)
 		r.Get("/health", handlers.HandleHealth)
 
-		// Sentry test — triggers a panic to verify error reporting. Remove after confirming.
-		r.Get("/debug/sentry", func(w http.ResponseWriter, r *http.Request) {
-			panic("sentry test panic")
-		})
-
 		// Auth
 		r.Post("/auth/signup", handlers.Signup(authSvc))
 		r.Post("/auth/login", handlers.Login(authSvc))

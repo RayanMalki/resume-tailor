@@ -2,6 +2,7 @@ import "./globals.css";
 import type { ReactNode } from "react";
 import { IBM_Plex_Sans, Space_Grotesk } from "next/font/google";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { ToastProvider } from "./components/Toast";
 
 const grotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -29,7 +30,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           Skip to content
         </a>
         <ErrorBoundary>
-          <div id="main-content">{children}</div>
+          <ToastProvider>
+            <div id="main-content">{children}</div>
+          </ToastProvider>
         </ErrorBoundary>
       </body>
     </html>

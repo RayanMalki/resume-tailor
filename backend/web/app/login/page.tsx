@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import TopBar from "../components/TopBar";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
@@ -129,6 +130,17 @@ export default function LoginPage() {
                 required
               />
             </div>
+
+            {mode === "login" ? (
+              <div className="text-right">
+                <Link
+                  href="/forgot-password"
+                  className="text-xs text-slate-400 transition hover:text-ember-300"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+            ) : null}
 
             {error ? (
               <div role="alert" className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2">
