@@ -228,6 +228,7 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 	// 4. Generate resume spec + LaTeX FIRST (before the report)
 	// so the report can compare original vs tailored resume.
 	var latexDoc string
+	var specJSON string // compact JSON of the spec — much smaller than LaTeX for the report prompt
 	if w.artifacts != nil && !latexExists {
 		if w.aiClient == nil {
 			return fmt.Errorf("ai client is not configured")
@@ -241,6 +242,10 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 			return fmt.Errorf("failed to store resume latex: %w", err)
 		}
 		latexExists = true
+		// Serialize the spec for the report prompt (much smaller than full LaTeX)
+		if specBytes, err := json.Marshal(spec); err == nil {
+			specJSON = string(specBytes)
+		}
 	} else if latexExists && w.artifacts != nil {
 		existing, err := w.artifacts.GetByRunIDAndType(ctx, runID, artifacts.TypeResumeLatex)
 		if err != nil {
@@ -251,7 +256,7 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 
 	// 5. Generate ATS report AFTER the resume so it can compare original vs tailored
 	if !reportExists {
-		atsReport, changePlan, err := w.aiClient.GenerateRunReport(ctx, resumeText, jobText, bm25Signals, latexDoc)
+		atsReport, changePlan, err := w.aiClient.GenerateRunReport(ctx, resumeText, jobText, bm25Signals, specJSON)
 		if err != nil {
 			return fmt.Errorf("failed to generate run report: %w", err)
 		}

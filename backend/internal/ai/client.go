@@ -101,10 +101,10 @@ func NewClientFromEnv(apiKey, model string) (*Client, error) {
 }
 
 // GenerateRunReport generates an ATS report and change plan using OpenAI.
-// tailoredLatex is the generated resume LaTeX so the report can compare original vs tailored.
-func (c *Client) GenerateRunReport(ctx context.Context, resumeText, jobText string, bm25Signals any, tailoredLatex string) (ATSReport, ChangePlan, error) {
+// tailoredSpec is the generated resume spec (JSON) so the report can compare original vs tailored.
+func (c *Client) GenerateRunReport(ctx context.Context, resumeText, jobText string, bm25Signals any, tailoredSpec string) (ATSReport, ChangePlan, error) {
 	// Build the prompt
-	prompt := c.buildPrompt(resumeText, jobText, bm25Signals, tailoredLatex)
+	prompt := c.buildPrompt(resumeText, jobText, bm25Signals, tailoredSpec)
 
 	// Call OpenAI
 	req := openai.ChatCompletionNewParams{
@@ -115,7 +115,9 @@ func (c *Client) GenerateRunReport(ctx context.Context, resumeText, jobText stri
 					"how modern applicant tracking systems parse, tokenize, and score resumes. " +
 					"You understand keyword matching, semantic similarity, section weighting, and " +
 					"formatting pitfalls that cause ATS parsers to drop content. " +
-					"You provide structured JSON responses with actionable, specific feedback."),
+					"You provide structured JSON responses with actionable, specific feedback. " +
+					"CRITICAL: You MUST write ALL output text in the same language as the resume. " +
+					"If the resume is in French, ALL notes, summary, and changes MUST be in French. No exceptions."),
 			openai.UserMessage(prompt),
 		},
 		Temperature:         openai.Float(0.3),
@@ -156,7 +158,7 @@ func (c *Client) GenerateRunReport(ctx context.Context, resumeText, jobText stri
 	return reportResp.ATSReport, reportResp.ChangePlan, nil
 }
 
-func (c *Client) buildPrompt(resumeText, jobText string, bm25Signals any, tailoredLatex string) string {
+func (c *Client) buildPrompt(resumeText, jobText string, bm25Signals any, tailoredSpec string) string {
 	var b strings.Builder
 
 	b.WriteString("You are given the ORIGINAL resume, the JOB DESCRIPTION, and the TAILORED RESUME that was already generated.\n")
@@ -175,10 +177,11 @@ func (c *Client) buildPrompt(resumeText, jobText string, bm25Signals any, tailor
 	b.WriteString("- The 'score' should reflect the TAILORED resume's ATS compatibility, not the original.\n")
 	b.WriteString("- The 'summary' must honestly describe what was modified. If little changed, say so.\n\n")
 
-	b.WriteString("IMPORTANT LANGUAGE RULE:\n")
-	b.WriteString("Detect the primary language of the RESUME. Write ALL text fields ('summary', 'notes', and 'changes') in that SAME language.\n")
-	b.WriteString("For example, if the resume is in French, write everything in French.\n")
-	b.WriteString("If the resume is in English, write everything in English.\n\n")
+	b.WriteString("MANDATORY LANGUAGE RULE (DO NOT IGNORE):\n")
+	b.WriteString("Detect the primary language of the RESUME. Write EVERY text field — 'summary', 'notes', AND 'changes' — in that SAME language.\n")
+	b.WriteString("If the resume is in French, ALL output text MUST be in French. Not a single note or change may be in English.\n")
+	b.WriteString("If the resume is in English, ALL output text MUST be in English.\n")
+	b.WriteString("This applies to EVERY string in the JSON response without exception.\n\n")
 
 	b.WriteString("ORIGINAL RESUME:\n")
 	b.WriteString(resumeText)
@@ -188,9 +191,9 @@ func (c *Client) buildPrompt(resumeText, jobText string, bm25Signals any, tailor
 	b.WriteString(jobText)
 	b.WriteString("\n\n")
 
-	if tailoredLatex != "" {
-		b.WriteString("TAILORED RESUME (LaTeX):\n")
-		b.WriteString(tailoredLatex)
+	if tailoredSpec != "" {
+		b.WriteString("TAILORED RESUME (generated spec):\n")
+		b.WriteString(tailoredSpec)
 		b.WriteString("\n\n")
 	}
 

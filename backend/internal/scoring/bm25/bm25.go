@@ -179,14 +179,67 @@ var synonyms = map[string]string{
 	// DevOps
 	"devops": "devops",
 	// Microservices
-	"microservices": "microservices",
-	"microservice":  "microservices",
+	"microservices": "microservice",
+	"microservice":  "microservice",
+	// API
+	"api":  "api",
+	"apis": "api",
+	// Tests automatisés / automated tests
+	"automatise":  "automatise",
+	"automatises": "automatise",
+	"automatisee": "automatise",
+	"automatisees": "automatise",
 }
 
 func canonicalize(token string) string {
 	if canon, ok := synonyms[token]; ok {
 		return canon
 	}
+	return token
+}
+
+// depluralize applies simple plural→singular normalization for English and French.
+// This is intentionally conservative — only strip suffixes that are safe and common.
+// We check the synonym table first because e.g. "apis" should become "api" not "api"→"api".
+func depluralize(token string) string {
+	n := len(token)
+	if n < 4 {
+		return token // too short to safely strip
+	}
+
+	// Don't strip if the result is a known synonym (handle separately)
+	if _, ok := synonyms[token]; ok {
+		return token
+	}
+
+	// French: -aux → -al (e.g. "reseaux" → "reseau") — skip, too risky
+	// French: -ées → -ee, -és → -e  (e.g. "automatisees" → "automatisee")
+	// English/French: -es → strip (e.g. "agiles"→"agile", "microservices"→"microservice")
+	// English/French: -s → strip (e.g. "apis"→"api", "tests"→"test")
+
+	// Try -es first (more specific)
+	if n > 4 && strings.HasSuffix(token, "es") {
+		candidate := token[:n-2]
+		// Only strip -es if the base is long enough and not ending in 's' already
+		if len(candidate) >= 3 && !strings.HasSuffix(candidate, "s") {
+			return candidate
+		}
+		// Otherwise try just -s
+		candidate = token[:n-1]
+		if len(candidate) >= 3 {
+			return candidate
+		}
+		return token
+	}
+
+	// Try -s
+	if strings.HasSuffix(token, "s") {
+		candidate := token[:n-1]
+		if len(candidate) >= 3 {
+			return candidate
+		}
+	}
+
 	return token
 }
 
@@ -208,9 +261,18 @@ func tokenize(text string) []string {
 			return
 		}
 		token := b.String()
-		if !isStopword(token) {
-			tokens = append(tokens, canonicalize(token))
+		if isStopword(token) {
+			b.Reset()
+			return
 		}
+		// Normalize plural → singular, then check stopwords again
+		// (e.g. "fonctions" → "fonction" which might be a stopword)
+		token = depluralize(token)
+		if isStopword(token) {
+			b.Reset()
+			return
+		}
+		tokens = append(tokens, canonicalize(token))
 		b.Reset()
 	}
 
@@ -359,6 +421,34 @@ var stopwords = map[string]struct{}{
 	"innovantes": {}, "innovante": {},
 	"maximum": {}, "valeur": {},
 	"divers": {}, "partenaires": {}, "affaires": {},
+
+	// ── French generic verbs/nouns that are not ATS-relevant ──────────
+	"acces": {}, "acceder": {},
+	"agir": {}, "action": {}, "actions": {},
+	"assurant": {}, "assurer": {}, "assure": {},
+	"creer": {}, "creation": {}, "cree": {},
+	"cours": {}, // "en cours de"
+	"banque": {}, "bancaire": {}, "nationale": {}, "national": {},
+	"back": {}, "end": {}, // "back-end" splits into "back" + "end"
+	"front": {}, // "front-end"
+	// "ton", "tes", "toi" already in French function words above
+	"developper": {}, "developpe": {}, "developpee": {},
+	"deployer": {}, "deploye": {},
+	"fonctions": {}, "fonction": {},
+	"solutions": {}, "solution": {},
+	"technologiques": {}, "technologique": {},
+	"programmes": {}, "programme": {},
+	"basees": {}, "basee": {},
+	"impact": {}, "impactant": {},
+	"baccalaureat": {},
+	"diplome": {}, "diplomes": {},
+	"type": {}, "types": {},
+	// "role" already in English job-posting boilerplate above
+	"developpeurs": {}, "developpeuse": {},
+	"assurance": {},
+	"resultats": {}, "resultat": {},
+	"processus": {}, "procedure": {}, "procedures": {},
+	"gerer": {}, "gerant": {},
 
 	// ── City names (not useful for ATS keyword matching) ──────────────
 	"montreal": {}, "toronto": {}, "vancouver": {}, "ottawa": {}, "quebec": {},

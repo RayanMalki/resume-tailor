@@ -95,6 +95,7 @@ var corpusIDF = map[string]float64{
 	"cicd":           4.8,
 	"devops":         4.2,
 	"microservices":  4.8,
+	"microservice":   4.8,
 	"serverless":     5.5,
 	"lambda":         5.5,
 	"ec2":            5.5,
@@ -510,6 +511,7 @@ var corpusIDF = map[string]float64{
 	"tests":           3.2,
 	"unitaire":        3.8, // = unit (test)
 	"unitaires":       3.8,
+	"automatise":      3.8, // = automated (tests automatisés)
 	// "integration" already in English section (3.2)
 	"equipe":     2.5, // équipe = team (low IDF, generic)
 	"projet":     2.5, // = project
