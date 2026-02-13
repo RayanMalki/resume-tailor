@@ -4,7 +4,7 @@ const nextConfig = {
   async redirects() {
     return [
       {
-        // Redirect old Render domain to new custom domain
+        // Redirect old Render domain to canonical www domain
         source: "/:path*",
         has: [
           {
@@ -12,19 +12,7 @@ const nextConfig = {
             value: "resume-tailor-web.onrender.com",
           },
         ],
-        destination: "https://resumetailor.live/:path*",
-        permanent: true, // 301 redirect — tells search engines the move is permanent
-      },
-      {
-        // Redirect www to non-www for consistency
-        source: "/:path*",
-        has: [
-          {
-            type: "host",
-            value: "www.resumetailor.live",
-          },
-        ],
-        destination: "https://resumetailor.live/:path*",
+        destination: "https://www.resumetailor.live/:path*",
         permanent: true,
       },
     ];
