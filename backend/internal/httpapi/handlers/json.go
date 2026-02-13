@@ -4,7 +4,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 )
+
+// primaryFrontendOrigin returns the first origin from the comma-separated
+// FRONTEND_ORIGIN env var. This is used for redirects and URL construction
+// (as opposed to CORS, which uses the full list).
+func primaryFrontendOrigin() string {
+	raw := strings.TrimSpace(os.Getenv("FRONTEND_ORIGIN"))
+	if raw == "" {
+		return "http://localhost:3000"
+	}
+	parts := strings.SplitN(raw, ",", 2)
+	return strings.TrimSpace(parts[0])
+}
 
 func writeJSON(w http.ResponseWriter, status int, data any) {
 

@@ -3,7 +3,6 @@ package handlers
 import (
 	"errors"
 	"net/http"
-	"os"
 	"strings"
 
 	"resume-tailor/internal/auth"
@@ -58,11 +57,7 @@ func ResendVerification(authSvc *auth.Service, emailSvc *email.Sender) http.Hand
 			return
 		}
 
-		frontendOrigin := strings.TrimSpace(os.Getenv("FRONTEND_ORIGIN"))
-		if frontendOrigin == "" {
-			frontendOrigin = "http://localhost:3000"
-		}
-		verifyURL := frontendOrigin + "/verify?token=" + token
+		verifyURL := primaryFrontendOrigin() + "/verify?token=" + token
 
 		// Get user email for sending
 		// We use the userID from context; in a real implementation you'd
@@ -103,11 +98,7 @@ func ForgotPassword(authSvc *auth.Service, emailSvc *email.Sender) http.HandlerF
 
 		// Always respond with success to avoid email enumeration
 		if token != "" {
-			frontendOrigin := strings.TrimSpace(os.Getenv("FRONTEND_ORIGIN"))
-			if frontendOrigin == "" {
-				frontendOrigin = "http://localhost:3000"
-			}
-			resetURL := frontendOrigin + "/reset-password?token=" + token
+			resetURL := primaryFrontendOrigin() + "/reset-password?token=" + token
 			_ = emailSvc.SendPasswordReset(r.Context(), email, resetURL)
 		}
 

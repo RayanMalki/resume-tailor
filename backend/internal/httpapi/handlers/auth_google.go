@@ -77,7 +77,7 @@ func GoogleCallback(authSvc *auth.Service) http.HandlerFunc {
 		clientID := strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_ID"))
 		clientSecret := strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_SECRET"))
 		redirectURL := strings.TrimSpace(os.Getenv("GOOGLE_REDIRECT_URL"))
-		frontendOrigin := strings.TrimSpace(os.Getenv("FRONTEND_ORIGIN"))
+		frontendOrigin := primaryFrontendOrigin()
 		if clientID == "" || clientSecret == "" || redirectURL == "" {
 			missing := []string{}
 			if clientID == "" {
@@ -159,9 +159,6 @@ func GoogleCallback(authSvc *auth.Service) http.HandlerFunc {
 			}
 		}
 
-		if frontendOrigin == "" {
-			frontendOrigin = "http://localhost:3000"
-		}
 		http.Redirect(w, r, strings.TrimRight(frontendOrigin, "/")+redirect, http.StatusFound)
 	}
 }
