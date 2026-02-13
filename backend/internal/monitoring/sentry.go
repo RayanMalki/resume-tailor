@@ -6,12 +6,15 @@
 package monitoring
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"runtime/debug"
 	"strings"
 	"time"
+
+	"github.com/getsentry/sentry-go"
 )
 
 // sentryEnabled tracks whether Sentry was configured. When false, all
@@ -19,7 +22,6 @@ import (
 var sentryEnabled bool
 
 // Init initializes monitoring. Call this early in main().
-// Currently implements structured logging of errors and metrics.
 // When SENTRY_DSN is set, errors will also be forwarded to Sentry.
 func Init(service string) {
 	dsn := strings.TrimSpace(os.Getenv("SENTRY_DSN"))
@@ -29,17 +31,23 @@ func Init(service string) {
 		return
 	}
 
-	// When the sentry-go SDK is added as a dependency, initialization would
-	// go here:
-	//
-	//   sentry.Init(sentry.ClientOptions{
-	//       Dsn:              dsn,
-	//       Environment:      os.Getenv("APP_ENV"),
-	//       Release:          service + "@" + buildVersion(),
-	//       TracesSampleRate: 0.2,
-	//   })
-	//
-	// For now we mark it as enabled and log.
+	env := os.Getenv("APP_ENV")
+	if env == "" {
+		env = "production"
+	}
+
+	err := sentry.Init(sentry.ClientOptions{
+		Dsn:              dsn,
+		Environment:      env,
+		Release:          service + "@" + buildVersion(),
+		TracesSampleRate: 0.2,
+	})
+	if err != nil {
+		slog.Error("monitoring: failed to initialize Sentry", "error", err)
+		sentryEnabled = false
+		return
+	}
+
 	sentryEnabled = true
 	slog.Info("monitoring: Sentry enabled", "service", service, "dsn_prefix", dsn[:min(len(dsn), 20)]+"...")
 }
@@ -50,11 +58,10 @@ func Flush(timeout time.Duration) {
 	if !sentryEnabled {
 		return
 	}
-	// sentry.Flush(timeout)
-	_ = timeout
+	sentry.Flush(timeout)
 }
 
-// CaptureError logs an error and optionally sends it to Sentry.
+// CaptureError logs an error and sends it to Sentry with optional tags.
 func CaptureError(err error, context map[string]string) {
 	attrs := []any{"error", err}
 	for k, v := range context {
@@ -63,16 +70,16 @@ func CaptureError(err error, context map[string]string) {
 	slog.Error("captured error", attrs...)
 
 	if sentryEnabled {
-		// sentry.WithScope(func(scope *sentry.Scope) {
-		//     for k, v := range context {
-		//         scope.SetTag(k, v)
-		//     }
-		//     sentry.CaptureException(err)
-		// })
+		sentry.WithScope(func(scope *sentry.Scope) {
+			for k, v := range context {
+				scope.SetTag(k, v)
+			}
+			sentry.CaptureException(err)
+		})
 	}
 }
 
-// CaptureMessage logs an informational message and optionally sends it to Sentry.
+// CaptureMessage logs an informational message and sends it to Sentry.
 func CaptureMessage(msg string, context map[string]string) {
 	attrs := []any{"message", msg}
 	for k, v := range context {
@@ -81,7 +88,12 @@ func CaptureMessage(msg string, context map[string]string) {
 	slog.Info("captured message", attrs...)
 
 	if sentryEnabled {
-		// sentry.CaptureMessage(msg)
+		sentry.WithScope(func(scope *sentry.Scope) {
+			for k, v := range context {
+				scope.SetTag(k, v)
+			}
+			sentry.CaptureMessage(msg)
+		})
 	}
 }
 
@@ -109,7 +121,9 @@ func RecoverMiddleware(next http.Handler) http.Handler {
 				)
 
 				if sentryEnabled {
-					// sentry.CurrentHub().Recover(rec)
+					hub := sentry.CurrentHub().Clone()
+					hub.Scope().SetRequest(r)
+					hub.RecoverWithContext(r.Context(), rec)
 				}
 
 				w.Header().Set("Content-Type", "application/json")
@@ -119,6 +133,39 @@ func RecoverMiddleware(next http.Handler) http.Handler {
 		}()
 		next.ServeHTTP(w, r)
 	})
+}
+
+// buildVersion returns the VCS revision from build info, or "unknown".
+func buildVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "unknown"
+	}
+	for _, s := range info.Settings {
+		if s.Key == "vcs.revision" && len(s.Value) >= 7 {
+			return s.Value[:7]
+		}
+	}
+	return "unknown"
+}
+
+// sentryError wraps a string message as an error for CaptureException.
+type sentryError struct {
+	msg string
+}
+
+func (e *sentryError) Error() string { return e.msg }
+
+// toError converts a recovered panic value to an error.
+func toError(v interface{}) error {
+	switch val := v.(type) {
+	case error:
+		return val
+	case string:
+		return &sentryError{msg: val}
+	default:
+		return &sentryError{msg: fmt.Sprintf("%v", val)}
+	}
 }
 
 // RequestMetricsMiddleware logs request duration and status for observability.
