@@ -13,10 +13,7 @@ const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
 export default function ResumePage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [resumeText, setResumeText] = useState("");
-  const [title, setTitle] = useState("My Resume");
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
@@ -73,14 +70,8 @@ export default function ResumePage() {
       }
 
       const data = await res.json();
-      // Set extracted text in the textarea so the user can review/edit
-      if (data.contentText) {
-        setResumeText(data.contentText);
-      }
-      if (data.title) {
-        setTitle(data.title);
-      }
-      toast("Resume text extracted successfully");
+      toast("Resume uploaded successfully");
+      router.push(`/job?resumeId=${data.resumeId}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to upload file";
       setError(msg);
@@ -108,31 +99,6 @@ export default function ResumePage() {
     setDragActive(false);
   }, []);
 
-  const handleNext = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`${API_BASE_URL}/v1/resumes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
-        credentials: "include",
-        body: JSON.stringify({ title, contentText: resumeText })
-      });
-
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || "Failed to create resume");
-      }
-
-      const data = await res.json();
-      router.push(`/job?resumeId=${data.resumeId}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create resume");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-ink-950 text-slate-100">
       <TopBar showLogout />
@@ -140,7 +106,7 @@ export default function ResumePage() {
         <div className="w-full max-w-2xl rounded-[28px] border border-white/10 bg-ink-900/70 p-5 shadow-panel backdrop-blur sm:p-8">
           <h1 className="text-xl font-semibold text-white sm:text-2xl">Upload your resume</h1>
           <p className="mt-2 text-sm text-slate-400">
-            Upload a PDF or DOCX file, or paste the text directly. We&apos;ll tailor it to your target job next.
+            Upload a PDF or DOCX file. We&apos;ll extract the text and tailor it to your target job next.
           </p>
 
           {/* File upload drop zone */}
@@ -194,56 +160,11 @@ export default function ResumePage() {
             )}
           </div>
 
-          {/* Divider */}
-          <div className="my-5 flex items-center gap-3 sm:my-6">
-            <div className="h-px flex-1 bg-white/10" />
-            <span className="text-xs uppercase tracking-[0.2em] text-slate-500">or paste text</span>
-            <div className="h-px flex-1 bg-white/10" />
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="resume-title" className="text-sm font-medium text-slate-200">Title</label>
-              <input
-                id="resume-title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-white/10 bg-ink-950 px-3 py-2.5 text-slate-100 focus:border-ember-500/60 focus:outline-none focus:ring-1 focus:ring-ember-500/40"
-              />
-            </div>
-            <div>
-              <label htmlFor="resume-text" className="text-sm font-medium text-slate-200">Resume text</label>
-              <textarea
-                id="resume-text"
-                value={resumeText}
-                onChange={(e) => setResumeText(e.target.value)}
-                rows={12}
-                className="mt-1 w-full rounded-xl border border-white/10 bg-ink-950 px-3 py-2.5 text-slate-100 focus:border-ember-500/60 focus:outline-none focus:ring-1 focus:ring-ember-500/40"
-                placeholder="Paste your resume here..."
-              />
-            </div>
-          </div>
-
           {error ? (
             <div role="alert" className="mt-4 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2">
               <p className="text-sm text-rose-300">{error}</p>
             </div>
           ) : null}
-
-          <div className="mt-6 flex justify-end">
-            <button
-              onClick={handleNext}
-              disabled={loading || resumeText.trim().length === 0}
-              className="flex items-center gap-2 rounded-full bg-ember-500 px-5 py-2.5 text-sm font-semibold text-ink-950 shadow-glow transition hover:-translate-y-0.5 hover:bg-ember-400 disabled:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-900"
-            >
-              {loading ? (
-                <>
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-ink-950/30 border-t-ink-950" />
-                  Saving&hellip;
-                </>
-              ) : "Next"}
-            </button>
-          </div>
         </div>
       </main>
     </div>
