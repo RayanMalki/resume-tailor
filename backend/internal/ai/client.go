@@ -57,6 +57,13 @@ type ProjectReason struct {
 	Reason string `json:"reason"`
 }
 
+type DisciplineContext struct {
+	Discipline    string   `json:"discipline,omitempty"`
+	RoleFocus     []string `json:"role_focus,omitempty"`
+	EvidenceFocus []string `json:"evidence_focus,omitempty"`
+	ActionVerbs   []string `json:"action_verbs,omitempty"`
+}
+
 type ResumeExperience struct {
 	Company  string   `json:"company"`
 	Role     string   `json:"role"`
@@ -166,8 +173,8 @@ func NewClientFromEnv(apiKey, model string) (*Client, error) {
 // It does NOT generate a change plan — that's computed programmatically from BM25 diffs.
 // addedKeywords = terms that moved from missing to matched (real changes).
 // missingTerms = terms still missing from the tailored resume.
-func (c *Client) GenerateRunReport(ctx context.Context, addedKeywords []string, missingTerms []string, resumeLang string) (ATSReport, ChangePlan, error) {
-	prompt := buildReportPrompt(addedKeywords, missingTerms, resumeLang)
+func (c *Client) GenerateRunReport(ctx context.Context, addedKeywords []string, missingTerms []string, resumeLang string, disciplineCtx DisciplineContext) (ATSReport, ChangePlan, error) {
+	prompt := buildReportPrompt(addedKeywords, missingTerms, resumeLang, disciplineCtx)
 
 	req := openai.ChatCompletionNewParams{
 		Model: c.model,
@@ -209,10 +216,18 @@ func (c *Client) GenerateRunReport(ctx context.Context, addedKeywords []string, 
 	return reportResp.ATSReport, reportResp.ChangePlan, nil
 }
 
-func buildReportPrompt(addedKeywords, missingTerms []string, lang string) string {
+func buildReportPrompt(addedKeywords, missingTerms []string, lang string, disciplineCtx DisciplineContext) string {
 	var b strings.Builder
 
 	b.WriteString("LANGUAGE: Write ALL text in " + lang + ". Every string MUST be in " + lang + ".\n\n")
+	if strings.TrimSpace(disciplineCtx.Discipline) != "" {
+		b.WriteString("DISCIPLINE CONTEXT:\n")
+		b.WriteString("- Discipline: " + disciplineCtx.Discipline + "\n")
+		if len(disciplineCtx.RoleFocus) > 0 {
+			b.WriteString("- Role focus: " + strings.Join(disciplineCtx.RoleFocus, ", ") + "\n")
+		}
+		b.WriteString("- Keep interview questions realistic for this discipline.\n\n")
+	}
 
 	b.WriteString("Based on the keyword analysis below, write a short ATS summary.\n\n")
 
@@ -326,8 +341,8 @@ func buildResumeLatexPrompt(resumeText, jobText string, bm25Signals any) string 
 }
 
 // GenerateResumeSpec generates a strict JSON resume spec for a fixed template.
-func (c *Client) GenerateResumeSpec(ctx context.Context, resumeText, jobText string, bm25Signals any, projectControls []ProjectControl) (ResumeSpec, error) {
-	prompt := buildResumeSpecPrompt(resumeText, jobText, bm25Signals, projectControls)
+func (c *Client) GenerateResumeSpec(ctx context.Context, resumeText, jobText string, bm25Signals any, projectControls []ProjectControl, disciplineCtx DisciplineContext) (ResumeSpec, error) {
+	prompt := buildResumeSpecPrompt(resumeText, jobText, bm25Signals, projectControls, disciplineCtx)
 
 	req := openai.ChatCompletionNewParams{
 		Model: c.model,
@@ -371,7 +386,7 @@ func (c *Client) GenerateResumeSpec(ctx context.Context, resumeText, jobText str
 	return spec, nil
 }
 
-func buildResumeSpecPrompt(resumeText, jobText string, bm25Signals any, projectControls []ProjectControl) string {
+func buildResumeSpecPrompt(resumeText, jobText string, bm25Signals any, projectControls []ProjectControl, disciplineCtx DisciplineContext) string {
 	var b strings.Builder
 	b.WriteString("Return ONLY JSON. No LaTeX. No commentary. Use ASCII text only.\n")
 	b.WriteString("Create a one-page resume spec tailored to the job.\n")
@@ -394,6 +409,20 @@ func buildResumeSpecPrompt(resumeText, jobText string, bm25Signals any, projectC
 	b.WriteString("You may only add synonym forms of existing skills (e.g. 'Golang' if 'Go' is present, 'Cloud' if 'Infonuagique' is present).\n")
 	b.WriteString("Target one page, but prioritize preserving relevant content quality over aggressive trimming.\n")
 	b.WriteString("If space is tight, shorten wording before removing relevant projects or experiences.\n\n")
+	if strings.TrimSpace(disciplineCtx.Discipline) != "" {
+		b.WriteString("DISCIPLINE CONTEXT:\n")
+		b.WriteString("- discipline: " + disciplineCtx.Discipline + "\n")
+		if len(disciplineCtx.RoleFocus) > 0 {
+			b.WriteString("- emphasize role focus: " + strings.Join(disciplineCtx.RoleFocus, ", ") + "\n")
+		}
+		if len(disciplineCtx.EvidenceFocus) > 0 {
+			b.WriteString("- prioritize evidence framing around: " + strings.Join(disciplineCtx.EvidenceFocus, ", ") + "\n")
+		}
+		if len(disciplineCtx.ActionVerbs) > 0 {
+			b.WriteString("- use action verbs when natural: " + strings.Join(disciplineCtx.ActionVerbs, ", ") + "\n")
+		}
+		b.WriteString("- keep content strictly truthful to resume evidence.\n\n")
+	}
 
 	b.WriteString("RESUME:\n")
 	b.WriteString(resumeText)
@@ -579,8 +608,8 @@ func buildProjectReasonsPrompt(resumeText, jobText, latex string, bm25Signals an
 	return b.String()
 }
 
-func (c *Client) GenerateCoverLetter(ctx context.Context, resumeText, jobText string, bm25Signals any, lang string) (string, error) {
-	prompt := buildCoverLetterPrompt(resumeText, jobText, bm25Signals, lang)
+func (c *Client) GenerateCoverLetter(ctx context.Context, resumeText, jobText string, bm25Signals any, lang string, disciplineCtx DisciplineContext) (string, error) {
+	prompt := buildCoverLetterPrompt(resumeText, jobText, bm25Signals, lang, disciplineCtx)
 
 	req := openai.ChatCompletionNewParams{
 		Model: c.model,
@@ -624,7 +653,7 @@ func (c *Client) GenerateCoverLetter(ctx context.Context, resumeText, jobText st
 	return strings.TrimSpace(parsed.CoverLetter), nil
 }
 
-func buildCoverLetterPrompt(resumeText, jobText string, bm25Signals any, lang string) string {
+func buildCoverLetterPrompt(resumeText, jobText string, bm25Signals any, lang string, disciplineCtx DisciplineContext) string {
 	var b strings.Builder
 	b.WriteString("Return ONLY JSON. No markdown. No commentary.\n")
 	b.WriteString("Write a one-page cover letter grounded strictly in the candidate resume and target job.\n")
@@ -635,6 +664,17 @@ func buildCoverLetterPrompt(resumeText, jobText string, bm25Signals any, lang st
 	b.WriteString("- Mention concrete resume evidence (projects, stack, outcomes) that matches the role.\n")
 	b.WriteString("- Do not invent achievements, metrics, or technologies not in the resume.\n")
 	b.WriteString("- Include a short close paragraph with interview interest.\n\n")
+	if strings.TrimSpace(disciplineCtx.Discipline) != "" {
+		b.WriteString("DISCIPLINE CONTEXT:\n")
+		b.WriteString("- discipline: " + disciplineCtx.Discipline + "\n")
+		if len(disciplineCtx.RoleFocus) > 0 {
+			b.WriteString("- align letter positioning to: " + strings.Join(disciplineCtx.RoleFocus, ", ") + "\n")
+		}
+		if len(disciplineCtx.EvidenceFocus) > 0 {
+			b.WriteString("- prioritize evidence around: " + strings.Join(disciplineCtx.EvidenceFocus, ", ") + "\n")
+		}
+		b.WriteString("- keep claims fully grounded in resume evidence.\n\n")
+	}
 
 	b.WriteString("RESUME:\n")
 	b.WriteString(resumeText)

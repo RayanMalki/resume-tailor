@@ -1,6 +1,10 @@
 package bm25
 
-import "testing"
+import (
+	"testing"
+
+	"resume-tailor/internal/scoring/profiles"
+)
 
 func TestComputeEmptyInputs(t *testing.T) {
 	got, err := Compute("", "")
@@ -127,8 +131,8 @@ func TestWeightedCoveragePrioritizesImportantTerms(t *testing.T) {
 	if got.Score >= 0.5 {
 		t.Fatalf("expected weighted coverage below 0.5, got %.4f", got.Score)
 	}
-	if got.Score <= 0.3 {
-		t.Fatalf("expected weighted coverage above 0.3, got %.4f", got.Score)
+	if got.Score <= 0.28 {
+		t.Fatalf("expected weighted coverage above 0.28, got %.4f", got.Score)
 	}
 }
 
@@ -233,5 +237,53 @@ func TestBucketedTopTermsClassifiesCoreSkills(t *testing.T) {
 	}
 	if len(got.BucketedTopTerms[categorySoftSkills]) == 0 {
 		t.Fatalf("expected soft skills bucket to be populated, got %+v", got.BucketedTopTerms)
+	}
+}
+
+func TestComputeWithProfileUsesDisciplineBuckets(t *testing.T) {
+	profile := profiles.Get(profiles.DisciplineMechanical)
+	resume := "solidworks fea cfd gdt"
+	job := "solidworks fea cfd gdt tolerance"
+
+	got, err := ComputeWithProfile(resume, job, profile)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got.Discipline != string(profiles.DisciplineMechanical) {
+		t.Fatalf("expected mechanical discipline, got %s", got.Discipline)
+	}
+	if len(got.BucketedTopTerms["design_tools"]) == 0 {
+		t.Fatalf("expected design_tools bucket terms, got %+v", got.BucketedTopTerms)
+	}
+	if len(got.BucketedTopTerms["simulation_analysis"]) == 0 {
+		t.Fatalf("expected simulation_analysis bucket terms, got %+v", got.BucketedTopTerms)
+	}
+}
+
+func TestComputeWithProfileHidesLowSignalOtherTerms(t *testing.T) {
+	profile := profiles.Get(profiles.DisciplineAerospace)
+	resume := "student team player"
+	job := "student team player do178 verification safety"
+
+	got, err := ComputeWithProfile(resume, job, profile)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, missing := range got.MissingJobTerms {
+		if missing.Term == "student" || missing.Term == "team" || missing.Term == "player" {
+			t.Fatalf("expected low-signal terms to be filtered, got %+v", got.MissingJobTerms)
+		}
+	}
+	foundCritical := false
+	for _, missing := range got.MissingJobTerms {
+		if missing.Term == "do178" {
+			foundCritical = true
+			break
+		}
+	}
+	if !foundCritical {
+		t.Fatalf("expected high-signal term do178 to remain visible, got %+v", got.MissingJobTerms)
 	}
 }

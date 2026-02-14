@@ -17,6 +17,7 @@ const defaultBodyLimit = int64(1 << 20) // 1MB
 var bodyLimitRules = []bodyLimitRule{
 	{Method: http.MethodPost, Path: "/v1/resumes", Limit: 2 << 20},
 	{Method: http.MethodPost, Path: "/v1/runs", Limit: 1 << 20},
+	{Method: http.MethodPost, Path: "/v1/disciplines/detect", Limit: 1 << 20},
 	{Method: http.MethodPost, Path: "/v1/auth/login", Limit: 64 << 10},
 	{Method: http.MethodPost, Path: "/v1/auth/signup", Limit: 64 << 10},
 }

@@ -63,6 +63,7 @@ func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes
 
 			//POST request
 			r.Post("/runs", handlers.CreateRunHandler(runsSvc, resumesSvc))
+			r.Post("/disciplines/detect", handlers.DetectDisciplineHandler(resumesSvc))
 			r.Post("/resumes", handlers.CreateResumeHandler(resumesSvc))
 			r.Post("/resumes/upload", handlers.UploadResumeHandler(resumesSvc))
 			r.Post("/auth/resend-verification", handlers.ResendVerification(authSvc, emailSvc))

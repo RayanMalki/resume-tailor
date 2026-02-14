@@ -62,7 +62,11 @@ regex async websocket mqtt protobuf
 microservice microservices serverless
 automated automation testing test tests unit integration
 ci cd
-go react node`
+go react node
+solidworks catia autocad ansys fea cfd gdt tolerance machining cnc fmea sixsigma plm pneumatics hydraulics
+pcb altium kicad microcontroller plc scada inverter simulink oscilloscope
+lean kaizen oee supplychain logistics inventory warehouse procurement forecasting throughput erp sap wms
+aerodynamics propulsion avionics aircraft spacecraft satellite orbital arinc do178 do254 verification validation safety`
 
 // isoEnglish contains the stopwords-iso English list (space-separated, lowercase).
 // Source: https://github.com/stopwords-iso/stopwords-en

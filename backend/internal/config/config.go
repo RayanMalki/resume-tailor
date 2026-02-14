@@ -13,6 +13,7 @@ type Config struct {
 	HTTPAddr         string
 	WorkerID         string
 	WorkerJobTimeout time.Duration
+	DisciplineMode   string
 	OpenAIAPIKey     string
 	OpenAIModel      string
 	FrontendOrigin   string
@@ -28,6 +29,7 @@ func Load() (Config, error) {
 		HTTPAddr:         os.Getenv("HTTP_ADDR"),
 		WorkerID:         os.Getenv("WORKER_ID"),
 		WorkerJobTimeout: 15 * time.Minute,
+		DisciplineMode:   os.Getenv("DISCIPLINE_MODE"),
 		OpenAIAPIKey:     os.Getenv("OPENAI_API_KEY"),
 		OpenAIModel:      os.Getenv("OPENAI_MODEL"),
 		FrontendOrigin:   os.Getenv("FRONTEND_ORIGIN"),
@@ -63,6 +65,15 @@ func Load() (Config, error) {
 
 	if cfg.OpenAIModel == "" {
 		cfg.OpenAIModel = "gpt-4o-mini"
+	}
+
+	switch cfg.DisciplineMode {
+	case "", "enforce":
+		cfg.DisciplineMode = "enforce"
+	case "off", "observe":
+		// valid values
+	default:
+		return Config{}, fmt.Errorf("invalid DISCIPLINE_MODE %q: must be off|observe|enforce", cfg.DisciplineMode)
 	}
 
 	if cfg.FrontendOrigin == "" {

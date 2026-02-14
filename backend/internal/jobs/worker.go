@@ -17,6 +17,8 @@ import (
 	"resume-tailor/internal/resumes"
 	"resume-tailor/internal/runreports"
 	"resume-tailor/internal/scoring/bm25"
+	"resume-tailor/internal/scoring/classifier"
+	"resume-tailor/internal/scoring/profiles"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -39,48 +41,62 @@ const (
 // RunsRepo is an interface to avoid import cycle with runs package
 type RunsRepo interface {
 	GetRunByID(ctx context.Context, runID uuid.UUID) (RunData, error)
+	UpdateRunDiscipline(ctx context.Context, runID uuid.UUID, discipline string, confidence float64, source string) error
 }
 
 // RunData represents the run data needed by the worker
 type RunData struct {
-	ID              uuid.UUID
-	ResumeID        uuid.UUID
-	JobText         string
-	ProjectControls []ai.ProjectControl
-	Status          string
-	ErrorMessage    *string
+	ID               uuid.UUID
+	ResumeID         uuid.UUID
+	JobText          string
+	ProjectControls  []ai.ProjectControl
+	Discipline       *string
+	DisciplineScore  float64
+	DisciplineSource string
+	Status           string
+	ErrorMessage     *string
 }
 
 type Worker struct {
-	jobsRepo    *Repo
-	db          *pgxpool.Pool
-	workerID    string
-	reportsSvc  *runreports.Service
-	runsRepo    RunsRepo
-	resumesRepo *resumes.Repo
-	aiClient    *ai.Client
-	artifacts   *artifacts.Service
-	pdfEnabled  bool
-	tectonicBin string
-	jobTimeout  time.Duration
+	jobsRepo       *Repo
+	db             *pgxpool.Pool
+	workerID       string
+	reportsSvc     *runreports.Service
+	runsRepo       RunsRepo
+	resumesRepo    *resumes.Repo
+	aiClient       *ai.Client
+	artifacts      *artifacts.Service
+	pdfEnabled     bool
+	tectonicBin    string
+	jobTimeout     time.Duration
+	disciplineMode string
 }
 
-func NewWorker(jobsRepo *Repo, db *pgxpool.Pool, workerID string, reportsSvc *runreports.Service, runsRepo RunsRepo, resumesRepo *resumes.Repo, aiClient *ai.Client, artifactsSvc *artifacts.Service, pdfEnabled bool, tectonicBin string, jobTimeout time.Duration) *Worker {
+func NewWorker(jobsRepo *Repo, db *pgxpool.Pool, workerID string, reportsSvc *runreports.Service, runsRepo RunsRepo, resumesRepo *resumes.Repo, aiClient *ai.Client, artifactsSvc *artifacts.Service, pdfEnabled bool, tectonicBin string, jobTimeout time.Duration, disciplineMode string) *Worker {
 	if jobTimeout <= 0 {
 		jobTimeout = defaultJobTimeout
 	}
+	switch strings.TrimSpace(strings.ToLower(disciplineMode)) {
+	case "", "enforce":
+		disciplineMode = "enforce"
+	case "off", "observe":
+		// valid
+	default:
+		disciplineMode = "enforce"
+	}
 	return &Worker{
-		jobsRepo:    jobsRepo,
-		db:          db,
-		workerID:    workerID,
-		reportsSvc:  reportsSvc,
-		runsRepo:    runsRepo,
-		resumesRepo: resumesRepo,
-		aiClient:    aiClient,
-		artifacts:   artifactsSvc,
-		pdfEnabled:  pdfEnabled,
-		tectonicBin: tectonicBin,
-		jobTimeout:  jobTimeout,
+		jobsRepo:       jobsRepo,
+		db:             db,
+		workerID:       workerID,
+		reportsSvc:     reportsSvc,
+		runsRepo:       runsRepo,
+		resumesRepo:    resumesRepo,
+		aiClient:       aiClient,
+		artifacts:      artifactsSvc,
+		pdfEnabled:     pdfEnabled,
+		tectonicBin:    tectonicBin,
+		jobTimeout:     jobTimeout,
+		disciplineMode: disciplineMode,
 	}
 }
 
@@ -252,16 +268,74 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 	resumeText := resume.ContentText
 	jobText := runData.JobText
 
-	// 3. Compute BM25 signals on ORIGINAL resume
+	// 3. Resolve discipline and scoring profile.
+	selectedDiscipline := profiles.DefaultDiscipline()
+	selectedConfidence := 0.0
+	selectedSource := profiles.SourceAuto
+	lowConfidence := true
+	var disciplineEvidence []classifier.EvidenceTerm
+
+	if runData.Discipline != nil {
+		if parsed, ok := profiles.ParseDiscipline(strings.TrimSpace(*runData.Discipline)); ok {
+			selectedDiscipline = parsed
+		}
+	}
+	if runData.DisciplineScore > 0 {
+		selectedConfidence = clamp01(runData.DisciplineScore)
+	}
+	if src := strings.TrimSpace(strings.ToLower(runData.DisciplineSource)); src == string(profiles.SourceUserOverride) {
+		selectedSource = profiles.SourceUserOverride
+		selectedConfidence = 1
+		lowConfidence = false
+	} else {
+		detected := classifier.Detect(resumeText, jobText)
+		selectedDiscipline = detected.Discipline
+		selectedConfidence = clamp01(detected.Confidence)
+		selectedSource = detected.Source
+		lowConfidence = detected.LowConfidence
+		disciplineEvidence = detected.Evidence
+	}
+
+	// Persist selected discipline metadata for GET /runs/{runID}.
+	if err := w.runsRepo.UpdateRunDiscipline(
+		ctx,
+		runID,
+		string(selectedDiscipline),
+		selectedConfidence,
+		string(selectedSource),
+	); err != nil {
+		slog.Warn("failed to persist run discipline metadata", "run_id", runID, "error", err)
+	}
+
+	effectiveDiscipline := selectedDiscipline
+	switch w.disciplineMode {
+	case "off", "observe":
+		effectiveDiscipline = profiles.DefaultDiscipline()
+	}
+	effectiveProfile := profiles.Get(effectiveDiscipline)
+
+	slog.Info(
+		"discipline_classification",
+		"run_id", runID,
+		"mode", w.disciplineMode,
+		"selected", selectedDiscipline,
+		"effective", effectiveDiscipline,
+		"confidence", selectedConfidence,
+		"low_confidence", lowConfidence,
+		"source", selectedSource,
+	)
+
+	// 4. Compute BM25 signals on ORIGINAL resume
 	var bm25Signals *bm25.Signals
-	signals, err := bm25.Compute(resumeText, jobText)
+	signals, err := bm25.ComputeWithProfile(resumeText, jobText, effectiveProfile)
 	if err != nil {
 		slog.Warn("BM25 computation failed, continuing without signals", "error", err, "run_id", runID)
 	} else {
+		applyDisciplineSignals(&signals, selectedDiscipline, disciplineEvidence)
 		bm25Signals = &signals
 	}
 
-	// 4. Generate resume spec + LaTeX FIRST (before the report)
+	// 5. Generate resume spec + LaTeX FIRST (before the report)
 	var latexDoc string
 	var spec ai.ResumeSpec
 	var specGenerated bool
@@ -269,7 +343,12 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		if w.aiClient == nil {
 			return fmt.Errorf("ai client is not configured")
 		}
-		spec, err = w.aiClient.GenerateResumeSpec(ctx, resumeText, jobText, bm25Signals, runData.ProjectControls)
+		spec, err = w.aiClient.GenerateResumeSpec(ctx, resumeText, jobText, bm25Signals, runData.ProjectControls, ai.DisciplineContext{
+			Discipline:    string(effectiveDiscipline),
+			RoleFocus:     effectiveProfile.PromptHints.RoleFocus,
+			EvidenceFocus: effectiveProfile.PromptHints.EvidenceFocus,
+			ActionVerbs:   effectiveProfile.PromptHints.ActionVerbs,
+		})
 		if err != nil {
 			return fmt.Errorf("failed to generate resume spec: %w", err)
 		}
@@ -292,7 +371,12 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 	// 4.1 Generate DOCX artifact for editable resume output.
 	if w.artifacts != nil && !docxExists {
 		if !specGenerated {
-			spec, err = w.aiClient.GenerateResumeSpec(ctx, resumeText, jobText, bm25Signals, runData.ProjectControls)
+			spec, err = w.aiClient.GenerateResumeSpec(ctx, resumeText, jobText, bm25Signals, runData.ProjectControls, ai.DisciplineContext{
+				Discipline:    string(effectiveDiscipline),
+				RoleFocus:     effectiveProfile.PromptHints.RoleFocus,
+				EvidenceFocus: effectiveProfile.PromptHints.EvidenceFocus,
+				ActionVerbs:   effectiveProfile.PromptHints.ActionVerbs,
+			})
 			if err != nil {
 				return fmt.Errorf("failed to generate resume spec for docx: %w", err)
 			}
@@ -314,13 +398,14 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		var tailoredSignals bm25.Signals
 		if specGenerated {
 			tailoredText := ai.ResumeSpecToText(spec)
-			ts, err := bm25.Compute(tailoredText, jobText)
+			ts, err := bm25.ComputeWithProfile(tailoredText, jobText, effectiveProfile)
 			if err != nil {
 				slog.Warn("BM25 computation on tailored resume failed", "error", err, "run_id", runID)
 				if bm25Signals != nil {
 					tailoredSignals = *bm25Signals
 				}
 			} else {
+				applyDisciplineSignals(&ts, selectedDiscipline, disciplineEvidence)
 				tailoredSignals = ts
 			}
 		} else if bm25Signals != nil {
@@ -358,7 +443,10 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		}
 
 		// Generate summary + notes from AI (no change plan — that's computed above)
-		atsReport, _, err := w.aiClient.GenerateRunReport(ctx, addedKeywords, missingNames, resumeLang)
+		atsReport, _, err := w.aiClient.GenerateRunReport(ctx, addedKeywords, missingNames, resumeLang, ai.DisciplineContext{
+			Discipline: string(effectiveDiscipline),
+			RoleFocus:  effectiveProfile.PromptHints.RoleFocus,
+		})
 		if err != nil {
 			return fmt.Errorf("failed to generate run report: %w", err)
 		}
@@ -380,13 +468,35 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 			changes = append(changes, "Le CV original était déjà bien adapté au poste — aucun mot-clé significatif n'a été ajouté.")
 		}
 		changePlan := ai.ChangePlan{Changes: changes}
+		originalMissingCount := 0
+		if bm25Signals != nil {
+			originalMissingCount = len(bm25Signals.MissingJobTerms)
+		}
+		slog.Info(
+			"discipline_run_metrics",
+			"run_id", runID,
+			"discipline", selectedDiscipline,
+			"source", selectedSource,
+			"low_confidence", lowConfidence,
+			"missing_before", originalMissingCount,
+			"missing_after", len(tailoredSignals.MissingJobTerms),
+			"mode", w.disciplineMode,
+		)
 
 		payload := reportPayload{
-			ReportVersion: 1,
-			GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
-			BM25Signals:   tailoredSignals,
-			ATSReport:     atsReport,
-			ChangePlan:    changePlan,
+			ReportVersion:        2,
+			GeneratedAt:          time.Now().UTC().Format(time.RFC3339),
+			BM25Signals:          tailoredSignals,
+			ATSReport:            atsReport,
+			ChangePlan:           changePlan,
+			Discipline:           string(selectedDiscipline),
+			DisciplineConfidence: selectedConfidence,
+			DisciplineSource:     string(selectedSource),
+			LowConfidence:        lowConfidence,
+			DisciplineEvidence:   toTermScores(disciplineEvidence),
+			CategoryCoverage:     tailoredSignals.CategoryCoverage,
+			ProfileVersion:       profiles.Version(),
+			ScoringDiscipline:    string(effectiveDiscipline),
 		}
 
 		atsReportJSON, err := json.Marshal(payload)
@@ -440,7 +550,11 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		if specGenerated && strings.TrimSpace(spec.Language) != "" {
 			resumeLang = spec.Language
 		}
-		coverLetter, err := w.aiClient.GenerateCoverLetter(ctx, resumeText, jobText, bm25Signals, resumeLang)
+		coverLetter, err := w.aiClient.GenerateCoverLetter(ctx, resumeText, jobText, bm25Signals, resumeLang, ai.DisciplineContext{
+			Discipline:    string(effectiveDiscipline),
+			RoleFocus:     effectiveProfile.PromptHints.RoleFocus,
+			EvidenceFocus: effectiveProfile.PromptHints.EvidenceFocus,
+		})
 		if err != nil {
 			slog.Warn("failed to generate cover letter; continuing without cover letter artifact", "run_id", runID, "error", err)
 		} else if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeCoverLetter, coverLetter); err != nil {
@@ -464,11 +578,55 @@ WHERE id = $1`
 }
 
 type reportPayload struct {
-	ReportVersion int           `json:"report_version"`
-	GeneratedAt   string        `json:"generated_at"`
-	BM25Signals   bm25.Signals  `json:"bm25_signals"`
-	ATSReport     ai.ATSReport  `json:"ats_report"`
-	ChangePlan    ai.ChangePlan `json:"change_plan"`
+	ReportVersion        int                `json:"report_version"`
+	GeneratedAt          string             `json:"generated_at"`
+	BM25Signals          bm25.Signals       `json:"bm25_signals"`
+	ATSReport            ai.ATSReport       `json:"ats_report"`
+	ChangePlan           ai.ChangePlan      `json:"change_plan"`
+	Discipline           string             `json:"discipline,omitempty"`
+	DisciplineConfidence float64            `json:"discipline_confidence,omitempty"`
+	DisciplineSource     string             `json:"discipline_source,omitempty"`
+	LowConfidence        bool               `json:"low_confidence,omitempty"`
+	DisciplineEvidence   []bm25.TermScore   `json:"discipline_evidence,omitempty"`
+	CategoryCoverage     map[string]float64 `json:"category_coverage,omitempty"`
+	ProfileVersion       string             `json:"profile_version,omitempty"`
+	ScoringDiscipline    string             `json:"scoring_discipline,omitempty"`
+}
+
+func applyDisciplineSignals(signals *bm25.Signals, discipline profiles.Discipline, evidence []classifier.EvidenceTerm) {
+	if signals == nil {
+		return
+	}
+	signals.Discipline = string(discipline)
+	signals.ProfileVersion = profiles.Version()
+	signals.DisciplineEvidence = toTermScores(evidence)
+}
+
+func toTermScores(evidence []classifier.EvidenceTerm) []bm25.TermScore {
+	if len(evidence) == 0 {
+		return nil
+	}
+	out := make([]bm25.TermScore, 0, len(evidence))
+	for _, item := range evidence {
+		if strings.TrimSpace(item.Term) == "" {
+			continue
+		}
+		out = append(out, bm25.TermScore{
+			Term:  item.Term,
+			Score: item.Score,
+		})
+	}
+	return out
+}
+
+func clamp01(v float64) float64 {
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
 }
 
 func safeErrorMessage(err error) string {

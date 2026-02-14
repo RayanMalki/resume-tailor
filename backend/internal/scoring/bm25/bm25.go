@@ -7,6 +7,8 @@ import (
 	"strings"
 	"unicode"
 
+	"resume-tailor/internal/scoring/profiles"
+
 	libbm25 "github.com/crawlab-team/bm25"
 	"golang.org/x/text/unicode/norm"
 )
@@ -36,6 +38,14 @@ type Signals struct {
 	BucketedTopTerms map[string][]TermScore `json:"bucketed_top_terms,omitempty"`
 	// LowSignalTerms are filtered from top/missing displays to reduce noise.
 	LowSignalTerms []TermScore `json:"low_signal_terms,omitempty"`
+	// CategoryCoverage reports matched/total weighted coverage per bucket.
+	CategoryCoverage map[string]float64 `json:"category_coverage,omitempty"`
+	// Discipline is the selected discipline for this scoring pass.
+	Discipline string `json:"discipline,omitempty"`
+	// DisciplineEvidence are the matched terms that drove discipline selection.
+	DisciplineEvidence []TermScore `json:"discipline_evidence,omitempty"`
+	// ProfileVersion identifies the profile dictionary version used for scoring.
+	ProfileVersion string `json:"profile_version,omitempty"`
 	// Score is IDF-weighted keyword coverage in [0,1]:
 	// matched job-term weight / total job-term weight.
 	Score float64 `json:"score"`
@@ -50,11 +60,25 @@ type Signals struct {
 // of job descriptions, replacing the previous single-document IDF calculation
 // which produced meaningless binary scores.
 func Compute(resumeText, jobText string) (Signals, error) {
-	resumeTokens := tokenize(resumeText)
-	jobTokens := tokenize(jobText)
+	return ComputeWithProfile(resumeText, jobText, profiles.Get(profiles.DefaultDiscipline()))
+}
+
+func ComputeWithProfile(resumeText, jobText string, profile profiles.Profile) (Signals, error) {
+	if profile.Discipline == "" {
+		profile = profiles.Get(profiles.DefaultDiscipline())
+	}
+	tokenizer := func(text string) []string {
+		return tokenizeWithProfile(text, profile)
+	}
+
+	resumeTokens := tokenizer(resumeText)
+	jobTokens := tokenizer(jobText)
 
 	if len(resumeTokens) == 0 || len(jobTokens) == 0 {
-		return Signals{}, nil
+		return Signals{
+			Discipline:     string(profile.Discipline),
+			ProfileVersion: profile.Version,
+		}, nil
 	}
 
 	// We still use the library for the overall document score, but now pass
@@ -62,7 +86,7 @@ func Compute(resumeText, jobText string) (Signals, error) {
 	// internal IDF has at least two documents to work with.
 	bm25Instance, err := libbm25.NewBM25Okapi(
 		[]string{resumeText, jobText},
-		tokenize, defaultK1, defaultB, nil,
+		tokenizer, defaultK1, defaultB, nil,
 	)
 	if err != nil {
 		return Signals{}, fmt.Errorf("bm25 init: %w", err)
@@ -87,6 +111,8 @@ func Compute(resumeText, jobText string) (Signals, error) {
 	topTerms := make([]TermScore, 0, len(jobFreq))
 	lowSignalTerms := make([]TermScore, 0)
 	buckets := make(map[string][]TermScore, 5)
+	bucketTotals := make(map[string]float64, len(profile.Buckets))
+	bucketMatched := make(map[string]float64, len(profile.Buckets))
 	totalWeight := 0.0
 	matchedWeight := 0.0
 
@@ -96,24 +122,30 @@ func Compute(resumeText, jobText string) (Signals, error) {
 		// Job-side importance is based on static corpus IDF and query frequency.
 		termIDF := lookupIDF(term)
 		importance := termIDF * float64(qtf)
-		category := classifyTerm(term)
+		if meta, ok := profile.CanonicalTerms[term]; ok && meta.Weight > 0 {
+			importance *= meta.Weight
+		}
+		category := bucketForTerm(profile, term)
+		weightedImportance := importance * profiles.BucketWeight(profile, category)
 		scored := TermScore{
 			Term:     term,
-			Score:    importance,
+			Score:    weightedImportance,
 			Category: category,
 		}
 
 		// Filter generic/noisy terms out of top/missing and coverage math.
-		if isLowSignalTerm(term, category, termIDF) {
+		if isLowSignalTerm(term, category, termIDF, profile) {
 			lowSignalTerms = append(lowSignalTerms, scored)
 			continue
 		}
 
-		totalWeight += importance
+		totalWeight += weightedImportance
+		bucketTotals[category] += weightedImportance
 
 		if tf > 0 {
 			overlapTerms = append(overlapTerms, term)
-			matchedWeight += importance
+			matchedWeight += weightedImportance
+			bucketMatched[category] += weightedImportance
 		} else {
 			missingTerms = append(missingTerms, scored)
 		}
@@ -142,6 +174,13 @@ func Compute(resumeText, jobText string) (Signals, error) {
 	if totalWeight > 0 {
 		coverageScore = matchedWeight / totalWeight
 	}
+	categoryCoverage := make(map[string]float64, len(bucketTotals))
+	for bucket, total := range bucketTotals {
+		if total <= 0 {
+			continue
+		}
+		categoryCoverage[bucket] = bucketMatched[bucket] / total
+	}
 
 	return Signals{
 		TopJobTerms:      topTerms,
@@ -149,6 +188,9 @@ func Compute(resumeText, jobText string) (Signals, error) {
 		OverlapTerms:     overlapTerms,
 		BucketedTopTerms: buckets,
 		LowSignalTerms:   lowSignalTerms,
+		CategoryCoverage: categoryCoverage,
+		Discipline:       string(profile.Discipline),
+		ProfileVersion:   profile.Version,
 		Score:            coverageScore,
 		BM25Score:        bm25Score,
 	}, nil
@@ -216,7 +258,21 @@ func classifyTerm(term string) string {
 	return categoryOther
 }
 
-func isLowSignalTerm(term, category string, idf float64) bool {
+func bucketForTerm(profile profiles.Profile, term string) string {
+	bucket := profiles.BucketForTerm(profile, term)
+	if bucket != "" && bucket != categoryOther {
+		return bucket
+	}
+	if profile.Discipline == profiles.DisciplineITSoftware {
+		return classifyTerm(term)
+	}
+	return categoryOther
+}
+
+func isLowSignalTerm(term, category string, idf float64, profile profiles.Profile) bool {
+	if profiles.IsLowSignal(profile, term) {
+		return true
+	}
 	if isDigitsOnly(term) {
 		return true
 	}
@@ -387,6 +443,10 @@ func depluralize(token string) string {
 }
 
 func tokenize(text string) []string {
+	return tokenizeWithProfile(text, profiles.Get(profiles.DefaultDiscipline()))
+}
+
+func tokenizeWithProfile(text string, profile profiles.Profile) []string {
 	if text == "" {
 		return nil
 	}
@@ -403,18 +463,20 @@ func tokenize(text string) []string {
 			return
 		}
 		token := b.String()
-		if isStopword(token) {
+		if isStopword(token) && !profile.StopwordOverrides[token] {
 			b.Reset()
 			return
 		}
-		// Normalize plural → singular, then check stopwords again
-		// (e.g. "fonctions" → "fonction" which might be a stopword)
-		token = depluralize(token)
-		if isStopword(token) {
+		// Normalize plural → singular only when token is not explicitly canonical.
+		// This avoids breaking tools like "solidworks" / "ansys".
+		if _, isCanonical := profile.CanonicalTerms[token]; !isCanonical {
+			token = depluralize(token)
+		}
+		if isStopword(token) && !profile.StopwordOverrides[token] {
 			b.Reset()
 			return
 		}
-		tokens = append(tokens, canonicalize(token))
+		tokens = append(tokens, canonicalizeWithProfile(token, profile))
 		b.Reset()
 	}
 
@@ -428,6 +490,13 @@ func tokenize(text string) []string {
 	flush()
 
 	return tokens
+}
+
+func canonicalizeWithProfile(token string, profile profiles.Profile) string {
+	token = profiles.Canonicalize(profile, token)
+	token = canonicalize(token)
+	token = profiles.Canonicalize(profile, token)
+	return token
 }
 
 func termFreq(tokens []string) map[string]int {

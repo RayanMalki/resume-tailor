@@ -2,9 +2,11 @@ package runs
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/google/uuid"
@@ -20,26 +22,40 @@ func NewRepo(db *pgxpool.Pool) *Repo {
 	return &Repo{db: db}
 }
 
-func (r *Repo) CreateRun(ctx context.Context, userID, resumeID uuid.UUID, jobText string, projectControls []ProjectControl) (Run, error) {
+func (r *Repo) CreateRun(ctx context.Context, userID, resumeID uuid.UUID, jobText string, projectControls []ProjectControl, discipline *Discipline, disciplineScore float64, disciplineSource DisciplineSource) (Run, error) {
 	controlsJSON, err := marshalProjectControls(projectControls)
 	if err != nil {
 		return Run{}, err
 	}
+	if math.IsNaN(disciplineScore) || math.IsInf(disciplineScore, 0) {
+		disciplineScore = 0
+	}
+	var disciplineRaw any
+	if discipline != nil {
+		disciplineRaw = string(*discipline)
+	}
+	if strings.TrimSpace(string(disciplineSource)) == "" {
+		disciplineSource = DisciplineSourceAuto
+	}
 
 	const q = `
-INSERT INTO runs (user_id, resume_id, job_text, project_controls, status)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, user_id, resume_id, job_text, project_controls, status, error_message, created_at, updated_at
+INSERT INTO runs (user_id, resume_id, job_text, project_controls, discipline, discipline_confidence, discipline_source, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, user_id, resume_id, job_text, project_controls, discipline, discipline_confidence, discipline_source, status, error_message, created_at, updated_at
 `
 
 	var run Run
 	var controlsRaw []byte
-	err = r.db.QueryRow(ctx, q, userID, resumeID, jobText, controlsJSON, StatusQueued).Scan(
+	var dbDiscipline sql.NullString
+	err = r.db.QueryRow(ctx, q, userID, resumeID, jobText, controlsJSON, disciplineRaw, disciplineScore, disciplineSource, StatusQueued).Scan(
 		&run.ID,
 		&run.UserID,
 		&run.ResumeID,
 		&run.JobText,
 		&controlsRaw,
+		&dbDiscipline,
+		&run.DisciplineScore,
+		&run.DisciplineSource,
 		&run.Status,
 		&run.ErrorMessage,
 		&run.CreatedAt,
@@ -49,6 +65,11 @@ RETURNING id, user_id, resume_id, job_text, project_controls, status, error_mess
 		return Run{}, err
 	}
 	run.ProjectControls = unmarshalProjectControls(controlsRaw)
+	if dbDiscipline.Valid {
+		if parsed, ok := ParseDiscipline(dbDiscipline.String); ok {
+			run.Discipline = &parsed
+		}
+	}
 
 	return run, nil
 }
@@ -59,17 +80,21 @@ func (r *Repo) GetRunByID(ctx context.Context, runID uuid.UUID) (Run, error) {
 
 	}
 	const q = `
-		SELECT id, user_id, resume_id, job_text, project_controls, status, error_message, created_at, updated_at 
+		SELECT id, user_id, resume_id, job_text, project_controls, discipline, discipline_confidence, discipline_source, status, error_message, created_at, updated_at 
 		FROM runs where id = $1`
 
 	var run Run
 	var controlsRaw []byte
+	var dbDiscipline sql.NullString
 	err := r.db.QueryRow(ctx, q, runID).Scan(
 		&run.ID,
 		&run.UserID,
 		&run.ResumeID,
 		&run.JobText,
 		&controlsRaw,
+		&dbDiscipline,
+		&run.DisciplineScore,
+		&run.DisciplineSource,
 		&run.Status,
 		&run.ErrorMessage,
 		&run.CreatedAt,
@@ -82,6 +107,11 @@ func (r *Repo) GetRunByID(ctx context.Context, runID uuid.UUID) (Run, error) {
 		return Run{}, err
 	}
 	run.ProjectControls = unmarshalProjectControls(controlsRaw)
+	if dbDiscipline.Valid {
+		if parsed, ok := ParseDiscipline(dbDiscipline.String); ok {
+			run.Discipline = &parsed
+		}
+	}
 	return run, nil
 
 }
@@ -103,7 +133,7 @@ func (r *Repo) ListRunsByUser(ctx context.Context, userID uuid.UUID, limit, offs
 	}
 
 	const q = `
-SELECT id, user_id, resume_id, job_text, project_controls, status, error_message, created_at, updated_at
+SELECT id, user_id, resume_id, job_text, project_controls, discipline, discipline_confidence, discipline_source, status, error_message, created_at, updated_at
 FROM runs
 WHERE user_id = $1
 ORDER BY created_at DESC
@@ -119,12 +149,16 @@ LIMIT $2 OFFSET $3`
 	for rows.Next() {
 		var run Run
 		var controlsRaw []byte
+		var dbDiscipline sql.NullString
 		if err := rows.Scan(
 			&run.ID,
 			&run.UserID,
 			&run.ResumeID,
 			&run.JobText,
 			&controlsRaw,
+			&dbDiscipline,
+			&run.DisciplineScore,
+			&run.DisciplineSource,
 			&run.Status,
 			&run.ErrorMessage,
 			&run.CreatedAt,
@@ -133,6 +167,11 @@ LIMIT $2 OFFSET $3`
 			return nil, err
 		}
 		run.ProjectControls = unmarshalProjectControls(controlsRaw)
+		if dbDiscipline.Valid {
+			if parsed, ok := ParseDiscipline(dbDiscipline.String); ok {
+				run.Discipline = &parsed
+			}
+		}
 		runs = append(runs, run)
 	}
 
@@ -168,6 +207,41 @@ func (r *Repo) UpdateRunStatus(ctx context.Context, runID uuid.UUID, status stri
 		return ErrRunNotFound
 	}
 
+	return nil
+}
+
+func (r *Repo) UpdateRunDiscipline(ctx context.Context, runID uuid.UUID, discipline Discipline, confidence float64, source DisciplineSource) error {
+	if runID == uuid.Nil {
+		return fmt.Errorf("bad input: run_id")
+	}
+	if _, ok := ParseDiscipline(string(discipline)); !ok {
+		return fmt.Errorf("bad input: discipline")
+	}
+	if source != DisciplineSourceAuto && source != DisciplineSourceUserOverride {
+		return fmt.Errorf("bad input: discipline_source")
+	}
+	if confidence < 0 {
+		confidence = 0
+	}
+	if confidence > 1 {
+		confidence = 1
+	}
+
+	const q = `
+		UPDATE runs
+		SET discipline = $2,
+		    discipline_confidence = $3,
+		    discipline_source = $4,
+		    updated_at = now()
+		WHERE id = $1
+	`
+	cmdTag, err := r.db.Exec(ctx, q, runID, string(discipline), confidence, string(source))
+	if err != nil {
+		return err
+	}
+	if cmdTag.RowsAffected() == 0 {
+		return ErrRunNotFound
+	}
 	return nil
 }
 

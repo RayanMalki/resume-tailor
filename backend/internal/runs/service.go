@@ -24,7 +24,7 @@ func NewService(repo *Repo, jobsEnq jobs.JobsEnqueuer) *Service {
 }
 
 func (s *Service) CreateRun(ctx context.Context, userID,
-	resumeID uuid.UUID, jobText string, projectControls []ProjectControl) (Run, error) {
+	resumeID uuid.UUID, jobText string, projectControls []ProjectControl, disciplineOverride *Discipline) (Run, error) {
 
 	if userID == uuid.Nil {
 		return Run{}, fmt.Errorf("bad input: user_id")
@@ -42,8 +42,17 @@ func (s *Service) CreateRun(ctx context.Context, userID,
 	jobText = strings.TrimSpace(jobText)
 
 	normalizedControls := normalizeProjectControls(projectControls)
+	disciplineSource := DisciplineSourceAuto
+	disciplineScore := 0.0
+	var discipline *Discipline
+	if disciplineOverride != nil {
+		override := *disciplineOverride
+		discipline = &override
+		disciplineSource = DisciplineSourceUserOverride
+		disciplineScore = 1.0
+	}
 
-	run, err := s.repo.CreateRun(ctx, userID, resumeID, jobText, normalizedControls)
+	run, err := s.repo.CreateRun(ctx, userID, resumeID, jobText, normalizedControls, discipline, disciplineScore, disciplineSource)
 	if err != nil {
 		return Run{}, err
 	}
@@ -60,6 +69,25 @@ func (s *Service) CreateRun(ctx context.Context, userID,
 
 	return run, nil
 
+}
+
+func (s *Service) UpdateRunDiscipline(ctx context.Context, runID uuid.UUID, discipline Discipline, confidence float64, source DisciplineSource) error {
+	if runID == uuid.Nil {
+		return fmt.Errorf("bad input: run_id")
+	}
+	if _, ok := ParseDiscipline(string(discipline)); !ok {
+		return fmt.Errorf("bad input: discipline")
+	}
+	if source != DisciplineSourceAuto && source != DisciplineSourceUserOverride {
+		return fmt.Errorf("bad input: discipline_source")
+	}
+	if confidence < 0 {
+		confidence = 0
+	}
+	if confidence > 1 {
+		confidence = 1
+	}
+	return s.repo.UpdateRunDiscipline(ctx, runID, discipline, confidence, source)
 }
 
 func normalizeProjectControls(controls []ProjectControl) []ProjectControl {

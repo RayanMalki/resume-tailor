@@ -79,6 +79,7 @@ func main() {
 		cfg.PDFEnabled,
 		cfg.TectonicBin,
 		cfg.WorkerJobTimeout,
+		cfg.DisciplineMode,
 	)
 
 	// Handle graceful shutdown
@@ -115,14 +116,34 @@ func (a *runsRepoAdapter) GetRunByID(ctx context.Context, runID uuid.UUID) (jobs
 	if err != nil {
 		return jobs.RunData{}, err
 	}
+	var discipline *string
+	if run.Discipline != nil {
+		value := string(*run.Discipline)
+		discipline = &value
+	}
 	return jobs.RunData{
-		ID:              run.ID,
-		ResumeID:        run.ResumeID,
-		JobText:         run.JobText,
-		ProjectControls: mapProjectControls(run.ProjectControls),
-		Status:          string(run.Status),
-		ErrorMessage:    run.ErrorMessage,
+		ID:               run.ID,
+		ResumeID:         run.ResumeID,
+		JobText:          run.JobText,
+		ProjectControls:  mapProjectControls(run.ProjectControls),
+		Discipline:       discipline,
+		DisciplineScore:  run.DisciplineScore,
+		DisciplineSource: string(run.DisciplineSource),
+		Status:           string(run.Status),
+		ErrorMessage:     run.ErrorMessage,
 	}, nil
+}
+
+func (a *runsRepoAdapter) UpdateRunDiscipline(ctx context.Context, runID uuid.UUID, discipline string, confidence float64, source string) error {
+	parsedDiscipline, ok := runs.ParseDiscipline(discipline)
+	if !ok {
+		return runs.ErrBadInput
+	}
+	parsedSource := runs.DisciplineSource(source)
+	if parsedSource != runs.DisciplineSourceAuto && parsedSource != runs.DisciplineSourceUserOverride {
+		return runs.ErrBadInput
+	}
+	return a.repo.UpdateRunDiscipline(ctx, runID, parsedDiscipline, confidence, parsedSource)
 }
 
 func mapProjectControls(controls []runs.ProjectControl) []ai.ProjectControl {

@@ -18,6 +18,10 @@ type BM25Signals = {
   overlap_terms: string[];
   bucketed_top_terms?: Record<string, TermScore[]>;
   low_signal_terms?: TermScore[];
+  category_coverage?: Record<string, number>;
+  discipline?: string;
+  discipline_evidence?: TermScore[];
+  profile_version?: string;
   score: number;
 };
 
@@ -33,6 +37,14 @@ type ATSReport = {
   summary: string;
   interview_questions: InterviewQuestion[];
   bm25_signals: BM25Signals | null;
+  discipline?: string;
+  discipline_confidence?: number;
+  discipline_source?: string;
+  low_confidence?: boolean;
+  category_coverage?: Record<string, number>;
+  discipline_evidence?: TermScore[];
+  profile_version?: string;
+  scoring_discipline?: string;
 };
 
 type Tab = "preview" | "report" | "cover" | "latex";
@@ -44,6 +56,14 @@ const bucketOrder: Array<{ key: string; label: string }> = [
   { key: "soft_skills", label: "Soft Skills" },
   { key: "other", label: "Other (high signal only)" }
 ];
+
+const disciplineLabels: Record<string, string> = {
+  mechanical: "Mechanical Engineering",
+  electrical: "Electrical Engineering",
+  industrial_logistics: "Industrial / Operations / Logistics",
+  aerospace: "Aerospace Engineering",
+  it_software: "IT / Software Engineering",
+};
 
 /* ------------------------------------------------------------------ */
 /*  Skeleton components for loading states                            */
@@ -264,6 +284,13 @@ export default function ResultPage() {
                   ? bm25Raw.bucketed_top_terms as Record<string, TermScore[]>
                   : undefined,
               low_signal_terms: Array.isArray(bm25Raw.low_signal_terms) ? bm25Raw.low_signal_terms : [],
+              category_coverage:
+                bm25Raw.category_coverage && typeof bm25Raw.category_coverage === "object"
+                  ? bm25Raw.category_coverage as Record<string, number>
+                  : undefined,
+              discipline: typeof bm25Raw.discipline === "string" ? bm25Raw.discipline : undefined,
+              discipline_evidence: Array.isArray(bm25Raw.discipline_evidence) ? bm25Raw.discipline_evidence : [],
+              profile_version: typeof bm25Raw.profile_version === "string" ? bm25Raw.profile_version : undefined,
               score: typeof bm25Raw.score === "number" ? bm25Raw.score : 0,
             }
           : null;
@@ -290,6 +317,17 @@ export default function ResultPage() {
           summary: typeof inner.summary === "string" ? inner.summary : "",
           interview_questions: interviewQuestions,
           bm25_signals: bm25,
+          discipline: typeof obj.discipline === "string" ? obj.discipline : undefined,
+          discipline_confidence: typeof obj.discipline_confidence === "number" ? obj.discipline_confidence : undefined,
+          discipline_source: typeof obj.discipline_source === "string" ? obj.discipline_source : undefined,
+          low_confidence: Boolean(obj.low_confidence),
+          category_coverage:
+            obj.category_coverage && typeof obj.category_coverage === "object"
+              ? obj.category_coverage as Record<string, number>
+              : bm25?.category_coverage,
+          discipline_evidence: Array.isArray(obj.discipline_evidence) ? obj.discipline_evidence : bm25?.discipline_evidence,
+          profile_version: typeof obj.profile_version === "string" ? obj.profile_version : bm25?.profile_version,
+          scoring_discipline: typeof obj.scoring_discipline === "string" ? obj.scoring_discipline : undefined,
         };
       })();
       if (parsed) setAtsReport(parsed);
@@ -703,6 +741,64 @@ export default function ResultPage() {
                         </p>
                       </div>
                     </div>
+
+                    {(atsReport.discipline || atsReport.profile_version) && (
+                      <div className="rounded-xl border border-white/10 bg-ink-900/50 p-4">
+                        <h4 className="text-sm font-semibold text-slate-200">Discipline context</h4>
+                        {atsReport.discipline ? (
+                          <p className="mt-2 text-sm text-slate-200">
+                            {disciplineLabels[atsReport.discipline] || atsReport.discipline}
+                          </p>
+                        ) : null}
+                        <p className="mt-1 text-xs text-slate-400">
+                          Confidence: {Math.round(((atsReport.discipline_confidence ?? 0) * 100))}% • Source: {atsReport.discipline_source || "auto"}
+                          {atsReport.low_confidence ? " • low confidence" : ""}
+                          {atsReport.scoring_discipline && atsReport.scoring_discipline !== atsReport.discipline ? ` • scoring profile: ${disciplineLabels[atsReport.scoring_discipline] || atsReport.scoring_discipline}` : ""}
+                        </p>
+                        {atsReport.profile_version ? (
+                          <p className="mt-1 text-[11px] text-slate-500">Profile version: {atsReport.profile_version}</p>
+                        ) : null}
+                        {Array.isArray(atsReport.discipline_evidence) && atsReport.discipline_evidence.length > 0 ? (
+                          <div className="mt-3">
+                            <p className="text-xs font-medium text-slate-300">Classification evidence</p>
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              {atsReport.discipline_evidence.slice(0, 8).map((item) => (
+                                <span
+                                  key={`discipline-evidence-${item.term}`}
+                                  className="rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1 text-xs text-cyan-200"
+                                >
+                                  {item.term}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
+
+                    {atsReport.category_coverage && Object.keys(atsReport.category_coverage).length > 0 && (
+                      <div className="rounded-xl border border-white/10 bg-ink-900/50 p-4">
+                        <h4 className="text-sm font-semibold text-slate-200">Bucket coverage by discipline</h4>
+                        <div className="mt-3 space-y-2">
+                          {Object.entries(atsReport.category_coverage)
+                            .sort(([a], [b]) => a.localeCompare(b))
+                            .map(([bucket, value]) => (
+                              <div key={`coverage-${bucket}`} className="space-y-1">
+                                <div className="flex items-center justify-between gap-2 text-xs text-slate-300">
+                                  <span>{bucketOrder.find((item) => item.key === bucket)?.label || bucket}</span>
+                                  <span>{Math.round(Math.max(0, Math.min(1, value)) * 100)}%</span>
+                                </div>
+                                <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
+                                  <div
+                                    className="h-full rounded-full bg-emerald-500/60"
+                                    style={{ width: `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Change Summary */}
                     {atsReport.summary && (
