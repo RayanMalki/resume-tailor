@@ -185,7 +185,7 @@ func (c *Client) GenerateRunReport(ctx context.Context, addedKeywords []string, 
 			openai.UserMessage(prompt),
 		},
 		Temperature:         openai.Float(0.3),
-		MaxCompletionTokens: openai.Int(500),
+		MaxCompletionTokens: openai.Int(1400),
 		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
 			OfJSONObject: func() *shared.ResponseFormatJSONObjectParam {
 				p := shared.NewResponseFormatJSONObjectParam()
@@ -209,11 +209,89 @@ func (c *Client) GenerateRunReport(ctx context.Context, addedKeywords []string, 
 	}
 
 	var reportResp ReportResponse
-	if err := json.Unmarshal([]byte(content), &reportResp); err != nil {
+	if err := unmarshalJSONObjectWithRecovery(content, &reportResp); err != nil {
 		return ATSReport{}, ChangePlan{}, fmt.Errorf("failed to parse OpenAI JSON response: %w", err)
 	}
 
 	return reportResp.ATSReport, reportResp.ChangePlan, nil
+}
+
+func unmarshalJSONObjectWithRecovery(content string, out any) error {
+	if err := json.Unmarshal([]byte(content), out); err == nil {
+		return nil
+	}
+
+	trimmed := strings.TrimSpace(content)
+	start := strings.Index(trimmed, "{")
+	end := strings.LastIndex(trimmed, "}")
+	if start >= 0 && end > start {
+		if err := json.Unmarshal([]byte(trimmed[start:end+1]), out); err == nil {
+			return nil
+		}
+	}
+
+	// Common failure mode is truncated JSON due output token budget.
+	// Try to close open braces while preserving the original content.
+	if fixed, ok := closeOpenBraces(trimmed); ok {
+		if err := json.Unmarshal([]byte(fixed), out); err == nil {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("unexpected end of JSON input")
+}
+
+func closeOpenBraces(s string) (string, bool) {
+	if s == "" {
+		return "", false
+	}
+	start := strings.Index(s, "{")
+	if start < 0 {
+		return "", false
+	}
+	s = s[start:]
+
+	depth := 0
+	inString := false
+	escaped := false
+	for _, r := range s {
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if r == '\\' {
+				escaped = true
+				continue
+			}
+			if r == '"' {
+				inString = false
+			}
+			continue
+		}
+		if r == '"' {
+			inString = true
+			continue
+		}
+		if r == '{' {
+			depth++
+			continue
+		}
+		if r == '}' && depth > 0 {
+			depth--
+		}
+	}
+
+	if depth <= 0 {
+		return s, true
+	}
+	var b strings.Builder
+	b.Grow(len(s) + depth)
+	b.WriteString(s)
+	for i := 0; i < depth; i++ {
+		b.WriteByte('}')
+	}
+	return b.String(), true
 }
 
 func buildReportPrompt(addedKeywords, missingTerms []string, lang string, disciplineCtx DisciplineContext) string {

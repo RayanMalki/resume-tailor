@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"resume-tailor/internal/ai"
@@ -448,7 +449,9 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 			RoleFocus:  effectiveProfile.PromptHints.RoleFocus,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to generate run report: %w", err)
+			// Report generation should not fail the entire run; fallback to deterministic notes.
+			slog.Warn("failed to generate run report; using deterministic fallback", "run_id", runID, "error", err)
+			atsReport = fallbackATSReport(addedKeywords, missingNames, resumeLang)
 		}
 
 		// Set score from IDF-weighted BM25 keyword coverage.
@@ -516,50 +519,73 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		}
 	}
 
-	// 6. Compile PDF
-	if w.pdfEnabled && !pdfExists && w.artifacts != nil && latexDoc != "" {
-		pdfBytes, err := latex.CompilePDF(ctx, w.tectonicBin, latexDoc)
-		if err != nil {
-			slog.Warn("failed to compile resume pdf; continuing without pdf artifact", "run_id", runID, "error", err)
-		} else {
-			encoded := base64.StdEncoding.EncodeToString(pdfBytes)
-			if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeResumePDF, encoded); err != nil {
-				return fmt.Errorf("failed to store resume pdf: %w", err)
-			}
-		}
-	}
+	// 6-8. Non-critical artifacts are generated concurrently to reduce wall time.
+	if w.artifacts != nil {
+		var wg sync.WaitGroup
 
-	// 7. Generate project reasons (if project controls were used)
-	if needsReasons && !reasonsExists && w.artifacts != nil && latexDoc != "" {
-		reasons, err := w.aiClient.GenerateProjectReasons(ctx, resumeText, jobText, latexDoc, bm25Signals, runData.ProjectControls)
-		if err != nil {
-			slog.Warn("failed to generate project reasons; continuing without project reasons artifact", "run_id", runID, "error", err)
-		} else {
-			reasonsJSON, err := json.Marshal(reasons)
-			if err != nil {
-				slog.Warn("failed to marshal project reasons; continuing without project reasons artifact", "run_id", runID, "error", err)
-			} else if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeProjectReasons, string(reasonsJSON)); err != nil {
-				slog.Warn("failed to store project reasons artifact; continuing", "run_id", runID, "error", err)
-			}
+		// Compile PDF
+		if w.pdfEnabled && !pdfExists && latexDoc != "" {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				pdfBytes, err := latex.CompilePDF(ctx, w.tectonicBin, latexDoc)
+				if err != nil {
+					slog.Warn("failed to compile resume pdf; continuing without pdf artifact", "run_id", runID, "error", err)
+					return
+				}
+				encoded := base64.StdEncoding.EncodeToString(pdfBytes)
+				if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeResumePDF, encoded); err != nil {
+					slog.Warn("failed to store resume pdf artifact; continuing", "run_id", runID, "error", err)
+				}
+			}()
 		}
-	}
 
-	// 8. Generate cover letter (best effort; does not fail the run)
-	if w.artifacts != nil && !coverLetterExists {
-		resumeLang := "French"
-		if specGenerated && strings.TrimSpace(spec.Language) != "" {
-			resumeLang = spec.Language
+		// Generate project reasons (if project controls were used)
+		if needsReasons && !reasonsExists && latexDoc != "" {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				reasons, err := w.aiClient.GenerateProjectReasons(ctx, resumeText, jobText, latexDoc, bm25Signals, runData.ProjectControls)
+				if err != nil {
+					slog.Warn("failed to generate project reasons; continuing without project reasons artifact", "run_id", runID, "error", err)
+					return
+				}
+				reasonsJSON, err := json.Marshal(reasons)
+				if err != nil {
+					slog.Warn("failed to marshal project reasons; continuing without project reasons artifact", "run_id", runID, "error", err)
+					return
+				}
+				if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeProjectReasons, string(reasonsJSON)); err != nil {
+					slog.Warn("failed to store project reasons artifact; continuing", "run_id", runID, "error", err)
+				}
+			}()
 		}
-		coverLetter, err := w.aiClient.GenerateCoverLetter(ctx, resumeText, jobText, bm25Signals, resumeLang, ai.DisciplineContext{
-			Discipline:    string(effectiveDiscipline),
-			RoleFocus:     effectiveProfile.PromptHints.RoleFocus,
-			EvidenceFocus: effectiveProfile.PromptHints.EvidenceFocus,
-		})
-		if err != nil {
-			slog.Warn("failed to generate cover letter; continuing without cover letter artifact", "run_id", runID, "error", err)
-		} else if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeCoverLetter, coverLetter); err != nil {
-			slog.Warn("failed to store cover letter artifact; continuing", "run_id", runID, "error", err)
+
+		// Generate cover letter (best effort)
+		if !coverLetterExists {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				resumeLang := "French"
+				if specGenerated && strings.TrimSpace(spec.Language) != "" {
+					resumeLang = spec.Language
+				}
+				coverLetter, err := w.aiClient.GenerateCoverLetter(ctx, resumeText, jobText, bm25Signals, resumeLang, ai.DisciplineContext{
+					Discipline:    string(effectiveDiscipline),
+					RoleFocus:     effectiveProfile.PromptHints.RoleFocus,
+					EvidenceFocus: effectiveProfile.PromptHints.EvidenceFocus,
+				})
+				if err != nil {
+					slog.Warn("failed to generate cover letter; continuing without cover letter artifact", "run_id", runID, "error", err)
+					return
+				}
+				if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeCoverLetter, coverLetter); err != nil {
+					slog.Warn("failed to store cover letter artifact; continuing", "run_id", runID, "error", err)
+				}
+			}()
 		}
+
+		wg.Wait()
 	}
 
 	return nil
@@ -627,6 +653,37 @@ func clamp01(v float64) float64 {
 		return 1
 	}
 	return v
+}
+
+func fallbackATSReport(addedKeywords, missingKeywords []string, resumeLang string) ai.ATSReport {
+	isFrench := strings.Contains(strings.ToLower(resumeLang), "fr")
+	var summary string
+	notes := make([]string, 0, 3)
+
+	if isFrench {
+		if len(addedKeywords) > 0 {
+			summary = fmt.Sprintf("Le CV a ete adapte avec %d mots-cles pertinents. Certains mots-cles restent absents et peuvent etre ajoutes si l'experience est verifiable.", len(addedKeywords))
+		} else {
+			summary = "Le CV etait deja relativement aligne. Quelques mots-cles importants restent absents et peuvent reduire la compatibilite ATS."
+		}
+		notes = append(notes, fmt.Sprintf("Mots-cles ajoutes: %d", len(addedKeywords)))
+		notes = append(notes, fmt.Sprintf("Mots-cles manquants: %d", len(missingKeywords)))
+		notes = append(notes, "Rapport genere en mode secours a cause d'une reponse IA invalide.")
+	} else {
+		if len(addedKeywords) > 0 {
+			summary = fmt.Sprintf("The resume was tailored with %d relevant keywords. Some keywords are still missing and can be added when backed by real experience.", len(addedKeywords))
+		} else {
+			summary = "The resume was already fairly aligned. Some high-signal keywords are still missing and may reduce ATS match quality."
+		}
+		notes = append(notes, fmt.Sprintf("Added keywords: %d", len(addedKeywords)))
+		notes = append(notes, fmt.Sprintf("Missing keywords: %d", len(missingKeywords)))
+		notes = append(notes, "Report generated in fallback mode due to invalid AI JSON output.")
+	}
+
+	return ai.ATSReport{
+		Notes:   notes,
+		Summary: summary,
+	}
 }
 
 func safeErrorMessage(err error) string {
