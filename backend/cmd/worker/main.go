@@ -18,6 +18,7 @@ import (
 	"resume-tailor/internal/resumes"
 	"resume-tailor/internal/runreports"
 	"resume-tailor/internal/runs"
+	"resume-tailor/migrations"
 
 	"github.com/google/uuid"
 )
@@ -41,6 +42,12 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close(pool)
+
+	slog.Info("running migrations")
+	if err := migrations.Run(ctx, pool); err != nil {
+		slog.Error("failed to run migrations", "error", err)
+		os.Exit(1)
+	}
 
 	jobsRepo := jobs.NewRepo(pool)
 	runreportsRepo := runreports.NewRepo(pool)

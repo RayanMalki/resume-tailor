@@ -7,17 +7,43 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Run applies all embedded SQL migrations in filename order.
 func Run(ctx context.Context, pool *pgxpool.Pool) error {
+	if err := ensureMigrationState(ctx, pool); err != nil {
+		return err
+	}
+
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire migration conn: %w", err)
+	}
+	defer conn.Release()
+
+	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", int64(982451653)); err != nil {
+		return fmt.Errorf("acquire migration lock: %w", err)
+	}
+	defer func() {
+		_, _ = conn.Exec(context.Background(), "SELECT pg_advisory_unlock($1)", int64(982451653))
+	}()
+
 	files, err := listFiles()
 	if err != nil {
 		return err
 	}
 
 	for _, name := range files {
+		applied, err := isApplied(ctx, conn.Conn(), name)
+		if err != nil {
+			return err
+		}
+		if applied {
+			continue
+		}
+
 		sqlBytes, err := fs.ReadFile(FS, name)
 		if err != nil {
 			return fmt.Errorf("read migration %s: %w", name, err)
@@ -28,7 +54,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool) error {
 			continue
 		}
 
-		tx, err := pool.Begin(ctx)
+		tx, err := conn.Conn().Begin(ctx)
 		if err != nil {
 			return fmt.Errorf("begin migration %s: %w", name, err)
 		}
@@ -36,12 +62,24 @@ func Run(ctx context.Context, pool *pgxpool.Pool) error {
 		if _, err := tx.Exec(ctx, sql); err != nil {
 			_ = tx.Rollback(ctx)
 			if isUnsafeEnumUse(err) {
-				if err := applyEnumMigrationInAutocommit(ctx, pool, sql); err != nil {
+				if err := applyEnumMigrationInAutocommit(ctx, conn.Conn(), sql); err != nil {
 					return fmt.Errorf("apply migration %s: %w", name, err)
+				}
+				if err := markApplied(ctx, conn.Conn(), name); err != nil {
+					return err
 				}
 				continue
 			}
 			return fmt.Errorf("apply migration %s: %w", name, err)
+		}
+
+		if _, err := tx.Exec(ctx, `
+INSERT INTO schema_migrations (name, applied_at)
+VALUES ($1, now())
+ON CONFLICT (name) DO NOTHING
+`, name); err != nil {
+			_ = tx.Rollback(ctx)
+			return fmt.Errorf("record migration %s: %w", name, err)
 		}
 
 		if err := tx.Commit(ctx); err != nil {
@@ -98,13 +136,13 @@ func isUnsafeEnumUse(err error) bool {
 	return strings.Contains(err.Error(), "unsafe use of new value")
 }
 
-func applyEnumMigrationInAutocommit(ctx context.Context, pool *pgxpool.Pool, sql string) error {
+func applyEnumMigrationInAutocommit(ctx context.Context, conn *pgx.Conn, sql string) error {
 	for _, stmt := range splitSQLStatements(sql) {
 		stmt = strings.TrimSpace(stmt)
 		if stmt == "" {
 			continue
 		}
-		if _, err := pool.Exec(ctx, stmt); err != nil {
+		if _, err := conn.Exec(ctx, stmt); err != nil {
 			return err
 		}
 	}
@@ -194,4 +232,40 @@ CREATE INDEX IF NOT EXISTS idx_run_artifacts_items_run_id
 `
 	_, err := pool.Exec(ctx, q)
 	return err
+}
+
+func ensureMigrationState(ctx context.Context, pool *pgxpool.Pool) error {
+	const q = `
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  name TEXT PRIMARY KEY,
+  applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);`
+	if _, err := pool.Exec(ctx, q); err != nil {
+		return fmt.Errorf("ensure schema_migrations table: %w", err)
+	}
+	return nil
+}
+
+func isApplied(ctx context.Context, conn *pgx.Conn, name string) (bool, error) {
+	const q = `SELECT 1 FROM schema_migrations WHERE name = $1`
+	var one int
+	err := conn.QueryRow(ctx, q, name).Scan(&one)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return false, nil
+		}
+		return false, fmt.Errorf("check migration state %s: %w", name, err)
+	}
+	return true, nil
+}
+
+func markApplied(ctx context.Context, conn *pgx.Conn, name string) error {
+	const q = `
+INSERT INTO schema_migrations (name, applied_at)
+VALUES ($1, now())
+ON CONFLICT (name) DO NOTHING`
+	if _, err := conn.Exec(ctx, q, name); err != nil {
+		return fmt.Errorf("record migration %s: %w", name, err)
+	}
+	return nil
 }

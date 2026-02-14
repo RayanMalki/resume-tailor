@@ -48,12 +48,10 @@ func main() {
 	}
 	defer db.Close(pool)
 
-	if os.Getenv("RUN_MIGRATIONS") == "1" {
-		slog.Info("running migrations")
-		if err := migrations.Run(ctx, pool); err != nil {
-			slog.Error("failed to run migrations", "error", err)
-			os.Exit(1)
-		}
+	slog.Info("running migrations")
+	if err := migrations.Run(ctx, pool); err != nil {
+		slog.Error("failed to run migrations", "error", err)
+		os.Exit(1)
 	}
 
 	authRepo := auth.NewRepo(pool)
