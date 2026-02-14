@@ -12,13 +12,14 @@ const OAuthStateCookieName = "oauth_state"
 const OAuthRedirectCookieName = "oauth_redirect"
 
 func SetSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time) {
-	secure, sameSite := sessionCookieOptions()
+	secure, sameSite, domain := sessionCookieOptions()
 	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    token,
 		Expires:  expiresAt,
 		HttpOnly: true,
 		Path:     "/",
+		Domain:   domain,
 		Secure:   secure,
 		SameSite: sameSite,
 	})
@@ -38,11 +39,12 @@ func ReadSessionCookie(r *http.Request) (token string, ok bool) {
 }
 
 func ClearSessionCookie(w http.ResponseWriter) {
-	secure, sameSite := sessionCookieOptions()
+	secure, sameSite, domain := sessionCookieOptions()
 	c := &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    "",
 		Path:     "/",
+		Domain:   domain,
 		Expires:  time.Unix(0, 0),
 		MaxAge:   -1,
 		HttpOnly: true,
@@ -54,13 +56,14 @@ func ClearSessionCookie(w http.ResponseWriter) {
 }
 
 func SetOAuthStateCookie(w http.ResponseWriter, state string, expiresAt time.Time) {
-	secure, sameSite := sessionCookieOptions()
+	secure, sameSite, domain := sessionCookieOptions()
 	http.SetCookie(w, &http.Cookie{
 		Name:     OAuthStateCookieName,
 		Value:    state,
 		Expires:  expiresAt,
 		HttpOnly: true,
 		Path:     "/",
+		Domain:   domain,
 		Secure:   secure,
 		SameSite: sameSite,
 	})
@@ -78,11 +81,12 @@ func ReadOAuthStateCookie(r *http.Request) (string, bool) {
 }
 
 func ClearOAuthStateCookie(w http.ResponseWriter) {
-	secure, sameSite := sessionCookieOptions()
+	secure, sameSite, domain := sessionCookieOptions()
 	c := &http.Cookie{
 		Name:     OAuthStateCookieName,
 		Value:    "",
 		Path:     "/",
+		Domain:   domain,
 		Expires:  time.Unix(0, 0),
 		MaxAge:   -1,
 		HttpOnly: true,
@@ -93,13 +97,14 @@ func ClearOAuthStateCookie(w http.ResponseWriter) {
 }
 
 func SetOAuthRedirectCookie(w http.ResponseWriter, path string, expiresAt time.Time) {
-	secure, sameSite := sessionCookieOptions()
+	secure, sameSite, domain := sessionCookieOptions()
 	http.SetCookie(w, &http.Cookie{
 		Name:     OAuthRedirectCookieName,
 		Value:    path,
 		Expires:  expiresAt,
 		HttpOnly: true,
 		Path:     "/",
+		Domain:   domain,
 		Secure:   secure,
 		SameSite: sameSite,
 	})
@@ -117,11 +122,12 @@ func ReadOAuthRedirectCookie(r *http.Request) (string, bool) {
 }
 
 func ClearOAuthRedirectCookie(w http.ResponseWriter) {
-	secure, sameSite := sessionCookieOptions()
+	secure, sameSite, domain := sessionCookieOptions()
 	c := &http.Cookie{
 		Name:     OAuthRedirectCookieName,
 		Value:    "",
 		Path:     "/",
+		Domain:   domain,
 		Expires:  time.Unix(0, 0),
 		MaxAge:   -1,
 		HttpOnly: true,
@@ -131,13 +137,14 @@ func ClearOAuthRedirectCookie(w http.ResponseWriter) {
 	http.SetCookie(w, c)
 }
 
-func sessionCookieOptions() (bool, http.SameSite) {
+func sessionCookieOptions() (bool, http.SameSite, string) {
 	secure := envTruthy("COOKIE_SECURE")
 	sameSite := parseSameSite(os.Getenv("COOKIE_SAMESITE"))
+	domain := strings.TrimSpace(os.Getenv("COOKIE_DOMAIN"))
 	if sameSite == http.SameSiteNoneMode && !secure {
 		secure = true
 	}
-	return secure, sameSite
+	return secure, sameSite, domain
 }
 
 func envTruthy(key string) bool {

@@ -21,6 +21,10 @@ services:
         value: "1"
       - key: COOKIE_SAMESITE
         value: "none"
+      - key: COOKIE_DOMAIN
+        value: ".resumetailor.live"
+      - key: GOOGLE_REDIRECT_URL
+        value: "https://www.resumetailor.live/api/v1/auth/google/callback"
   - type: worker
     name: resume-tailor-worker
     rootDir: backend
@@ -52,7 +56,11 @@ services:
     startCommand: npm run start
     envVars:
       - key: NEXT_PUBLIC_API_BASE_URL
+        value: "/api"
+      - key: API_PROXY_TARGET
         value: "https://resume-tailor-api-m106.onrender.com"
+      - key: NEXT_PUBLIC_SITE_URL
+        value: "https://www.resumetailor.live"
 databases:
   - name: resume-tailor-db
     plan: free

@@ -7,7 +7,9 @@ Prerequisites
 Environment
 Create `.env.local`:
 ```
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
+NEXT_PUBLIC_API_BASE_URL=/api
+API_PROXY_TARGET=http://localhost:8080
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
 Run
