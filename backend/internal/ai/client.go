@@ -13,14 +13,20 @@ import (
 
 // ATSReport represents the ATS scoring report
 type ATSReport struct {
-	Score   float64  `json:"score"`
-	Notes   []string `json:"notes"`
-	Summary string   `json:"summary"`
+	Score              float64             `json:"score"`
+	Notes              []string            `json:"notes"`
+	Summary            string              `json:"summary"`
+	InterviewQuestions []InterviewQuestion `json:"interview_questions,omitempty"`
 }
 
 // ChangePlan represents the recommended changes
 type ChangePlan struct {
 	Changes []string `json:"changes"`
+}
+
+type InterviewQuestion struct {
+	Question   string   `json:"question"`
+	AnswerSTAR []string `json:"answer_star"`
 }
 
 type ResumeSpec struct {
@@ -224,14 +230,29 @@ func buildReportPrompt(addedKeywords, missingTerms []string, lang string) string
 	b.WriteString("RULES:\n")
 	b.WriteString("- 'summary': 2-3 sentences. If no keywords were added, say the resume was already well-suited and explain what's still missing.\n")
 	b.WriteString("- 'notes': 2-3 short observations about ATS compatibility.\n")
+	b.WriteString("- 'interview_questions': exactly 5 likely interview questions for this role.\n")
+	b.WriteString("- For each interview question, provide STAR bullet answers in 4 bullets: Situation, Task, Action, Result.\n")
+	b.WriteString("- STAR bullets must be grounded in resume evidence and remain truthful.\n")
 	b.WriteString("- Do NOT describe formatting changes, reorganization, or title changes unless keywords tell you so.\n")
 	b.WriteString("- Be factual. Only mention what the keyword data shows.\n\n")
 
 	b.WriteString("Respond with JSON:\n")
 	b.WriteString(`{
   "ats_report": {
+    "score": 0.0,
     "notes": ["<string>", ...],
-    "summary": "<string>"
+    "summary": "<string>",
+    "interview_questions": [
+      {
+        "question": "<string>",
+        "answer_star": [
+          "Situation: <string>",
+          "Task: <string>",
+          "Action: <string>",
+          "Result: <string>"
+        ]
+      }
+    ]
   },
   "change_plan": {
     "changes": []
@@ -554,6 +575,87 @@ func buildProjectReasonsPrompt(resumeText, jobText, latex string, bm25Signals an
       "reason": ""
     }
   ]
+}`)
+	return b.String()
+}
+
+func (c *Client) GenerateCoverLetter(ctx context.Context, resumeText, jobText string, bm25Signals any, lang string) (string, error) {
+	prompt := buildCoverLetterPrompt(resumeText, jobText, bm25Signals, lang)
+
+	req := openai.ChatCompletionNewParams{
+		Model: c.model,
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage(
+				"You write concise, truthful, role-targeted cover letters. " +
+					"Return ONLY JSON in the requested format."),
+			openai.UserMessage(prompt),
+		},
+		Temperature:         openai.Float(0.35),
+		MaxCompletionTokens: openai.Int(1400),
+		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
+			OfJSONObject: func() *shared.ResponseFormatJSONObjectParam {
+				p := shared.NewResponseFormatJSONObjectParam()
+				return &p
+			}(),
+		},
+	}
+
+	resp, err := c.client.Chat.Completions.New(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("OpenAI API error: %w", err)
+	}
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("no choices in OpenAI response")
+	}
+	content := strings.TrimSpace(resp.Choices[0].Message.Content)
+	if content == "" {
+		return "", fmt.Errorf("empty content in OpenAI response")
+	}
+
+	var parsed struct {
+		CoverLetter string `json:"cover_letter"`
+	}
+	if err := json.Unmarshal([]byte(content), &parsed); err != nil {
+		return "", fmt.Errorf("failed to parse cover letter JSON: %w", err)
+	}
+	if strings.TrimSpace(parsed.CoverLetter) == "" {
+		return "", fmt.Errorf("cover letter generation returned empty content")
+	}
+	return strings.TrimSpace(parsed.CoverLetter), nil
+}
+
+func buildCoverLetterPrompt(resumeText, jobText string, bm25Signals any, lang string) string {
+	var b strings.Builder
+	b.WriteString("Return ONLY JSON. No markdown. No commentary.\n")
+	b.WriteString("Write a one-page cover letter grounded strictly in the candidate resume and target job.\n")
+	b.WriteString("LANGUAGE: All output must be in " + lang + ".\n")
+	b.WriteString("Tone: professional, specific, concise. Avoid generic buzzwords.\n")
+	b.WriteString("Rules:\n")
+	b.WriteString("- 4 to 6 paragraphs, each 2-4 sentences.\n")
+	b.WriteString("- Mention concrete resume evidence (projects, stack, outcomes) that matches the role.\n")
+	b.WriteString("- Do not invent achievements, metrics, or technologies not in the resume.\n")
+	b.WriteString("- Include a short close paragraph with interview interest.\n\n")
+
+	b.WriteString("RESUME:\n")
+	b.WriteString(resumeText)
+	b.WriteString("\n\n")
+	b.WriteString("JOB DESCRIPTION:\n")
+	b.WriteString(jobText)
+	b.WriteString("\n\n")
+	if bm25Signals != nil {
+		b.WriteString("BM25 SIGNALS:\n")
+		serialized, err := json.MarshalIndent(bm25Signals, "", "  ")
+		if err != nil {
+			b.WriteString("(BM25 analysis available, failed to serialize)\n\n")
+		} else {
+			b.WriteString(string(serialized))
+			b.WriteString("\n\n")
+		}
+	}
+
+	b.WriteString("Return JSON in this format:\n")
+	b.WriteString(`{
+  "cover_letter": ""
 }`)
 	return b.String()
 }

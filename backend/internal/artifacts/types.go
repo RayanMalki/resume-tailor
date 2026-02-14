@@ -17,6 +17,8 @@ type Artifact struct {
 const (
 	TypeResumeLatex    = "resume_latex"
 	TypeResumePDF      = "resume_pdf"
+	TypeResumeDOCX     = "resume_docx"
+	TypeCoverLetter    = "cover_letter"
 	TypeProjectReasons = "project_reasons"
 )
 

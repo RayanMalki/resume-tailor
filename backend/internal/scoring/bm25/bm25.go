@@ -2,6 +2,7 @@ package bm25
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"unicode"
@@ -15,12 +16,15 @@ const (
 	defaultB       = 0.75
 	defaultTopN    = 10
 	minTokenLength = 2
+	// Terms that fall into "other" are hidden unless they are truly distinctive.
+	highIDFOtherThreshold = 6.2
 )
 
 // TermScore represents a term with its BM25-derived score.
 type TermScore struct {
-	Term  string  `json:"term"`
-	Score float64 `json:"score"`
+	Term     string  `json:"term"`
+	Score    float64 `json:"score"`
+	Category string  `json:"category,omitempty"`
 }
 
 // Signals exposes BM25-derived signals for reporting.
@@ -28,6 +32,10 @@ type Signals struct {
 	TopJobTerms     []TermScore `json:"top_job_terms"`
 	MissingJobTerms []TermScore `json:"missing_job_terms"`
 	OverlapTerms    []string    `json:"overlap_terms"`
+	// BucketedTopTerms groups high-signal terms into deterministic categories.
+	BucketedTopTerms map[string][]TermScore `json:"bucketed_top_terms,omitempty"`
+	// LowSignalTerms are filtered from top/missing displays to reduce noise.
+	LowSignalTerms []TermScore `json:"low_signal_terms,omitempty"`
 	// Score is IDF-weighted keyword coverage in [0,1]:
 	// matched job-term weight / total job-term weight.
 	Score float64 `json:"score"`
@@ -77,6 +85,8 @@ func Compute(resumeText, jobText string) (Signals, error) {
 	overlapTerms := make([]string, 0)
 	missingTerms := make([]TermScore, 0)
 	topTerms := make([]TermScore, 0, len(jobFreq))
+	lowSignalTerms := make([]TermScore, 0)
+	buckets := make(map[string][]TermScore, 5)
 	totalWeight := 0.0
 	matchedWeight := 0.0
 
@@ -86,27 +96,43 @@ func Compute(resumeText, jobText string) (Signals, error) {
 		// Job-side importance is based on static corpus IDF and query frequency.
 		termIDF := lookupIDF(term)
 		importance := termIDF * float64(qtf)
+		category := classifyTerm(term)
+		scored := TermScore{
+			Term:     term,
+			Score:    importance,
+			Category: category,
+		}
+
+		// Filter generic/noisy terms out of top/missing and coverage math.
+		if isLowSignalTerm(term, category, termIDF) {
+			lowSignalTerms = append(lowSignalTerms, scored)
+			continue
+		}
+
 		totalWeight += importance
 
 		if tf > 0 {
 			overlapTerms = append(overlapTerms, term)
 			matchedWeight += importance
 		} else {
-			missingTerms = append(missingTerms, TermScore{
-				Term:  term,
-				Score: importance,
-			})
+			missingTerms = append(missingTerms, scored)
 		}
 
-		topTerms = append(topTerms, TermScore{
-			Term:  term,
-			Score: importance,
-		})
+		topTerms = append(topTerms, scored)
+		buckets[category] = append(buckets[category], scored)
 	}
 
 	sortStrings(overlapTerms)
 	sortTermScores(topTerms)
 	sortTermScores(missingTerms)
+	sortTermScores(lowSignalTerms)
+	for category, terms := range buckets {
+		sortTermScores(terms)
+		if len(terms) > defaultTopN {
+			terms = terms[:defaultTopN]
+		}
+		buckets[category] = terms
+	}
 
 	if len(topTerms) > defaultTopN {
 		topTerms = topTerms[:defaultTopN]
@@ -118,12 +144,114 @@ func Compute(resumeText, jobText string) (Signals, error) {
 	}
 
 	return Signals{
-		TopJobTerms:     topTerms,
-		MissingJobTerms: missingTerms,
-		OverlapTerms:    overlapTerms,
-		Score:           coverageScore,
-		BM25Score:       bm25Score,
+		TopJobTerms:      topTerms,
+		MissingJobTerms:  missingTerms,
+		OverlapTerms:     overlapTerms,
+		BucketedTopTerms: buckets,
+		LowSignalTerms:   lowSignalTerms,
+		Score:            coverageScore,
+		BM25Score:        bm25Score,
 	}, nil
+}
+
+const (
+	categoryLanguages   = "languages"
+	categoryCloudDevOps = "cloud_devops_db"
+	categoryPractices   = "practices"
+	categorySoftSkills  = "soft_skills"
+	categoryOther       = "other"
+)
+
+var (
+	languageTerms = map[string]struct{}{
+		"python": {}, "java": {}, "javascript": {}, "typescript": {}, "golang": {}, "csharp": {},
+		"cpp": {}, "ruby": {}, "php": {}, "rust": {}, "kotlin": {}, "swift": {}, "scala": {},
+		"sql": {}, "bash": {}, "powershell": {}, "r": {}, "perl": {}, "matlab": {},
+	}
+	cloudDevOpsDBTerms = map[string]struct{}{
+		"aws": {}, "azure": {}, "gcp": {}, "cloud": {}, "devops": {}, "docker": {}, "kubernetes": {},
+		"terraform": {}, "ansible": {}, "jenkins": {}, "helm": {}, "linux": {}, "nginx": {},
+		"postgresql": {}, "mysql": {}, "mongodb": {}, "redis": {}, "dynamodb": {}, "snowflake": {},
+		"bigquery": {}, "databricks": {}, "kafka": {}, "rabbitmq": {}, "prometheus": {}, "grafana": {},
+		"nodejs": {}, "nextjs": {},
+	}
+	practiceTerms = map[string]struct{}{
+		"agile": {}, "scrum": {}, "kanban": {}, "tdd": {}, "ddd": {}, "sre": {}, "ci": {},
+		"cd": {}, "cicd": {}, "microservice": {}, "api": {}, "rest": {}, "graphql": {},
+		"testing": {}, "test": {}, "automation": {}, "architecture": {}, "observability": {},
+		"monitoring": {}, "reliability": {}, "security": {}, "performance": {},
+	}
+	softSkillTerms = map[string]struct{}{
+		"communication": {}, "leadership": {}, "mentoring": {}, "collaboration": {}, "stakeholder": {},
+		"ownership": {}, "initiative": {}, "teamwork": {}, "presentation": {}, "adaptability": {},
+		"problem": {}, "problemsolving": {}, "problem-solving": {}, "coaching": {},
+	}
+	lowSignalTerms = map[string]struct{}{
+		"experience": {}, "years": {}, "year": {}, "preferred": {}, "required": {}, "requirements": {},
+		"ability": {}, "strong": {}, "excellent": {}, "good": {}, "role": {}, "position": {},
+		"responsibility": {}, "responsibilities": {}, "candidate": {}, "skills": {}, "skill": {},
+		"knowledge": {}, "understanding": {}, "familiarity": {}, "using": {}, "plus": {}, "must": {},
+		"nice": {}, "seeking": {}, "join": {}, "company": {}, "business": {}, "customer": {},
+		"customers": {}, "team": {}, "teams": {}, "support": {}, "supporting": {}, "work": {},
+		"working": {}, "develop": {}, "development": {}, "design": {}, "implement": {},
+		"implementation": {}, "maintain": {}, "maintenance": {}, "build": {}, "building": {},
+		"solutions": {}, "solution": {}, "environments": {}, "environment": {},
+	}
+	reSQLFamily = regexp.MustCompile(`.+sql$`)
+)
+
+func classifyTerm(term string) string {
+	if _, ok := languageTerms[term]; ok {
+		return categoryLanguages
+	}
+	if _, ok := cloudDevOpsDBTerms[term]; ok || reSQLFamily.MatchString(term) {
+		return categoryCloudDevOps
+	}
+	if _, ok := practiceTerms[term]; ok {
+		return categoryPractices
+	}
+	if _, ok := softSkillTerms[term]; ok {
+		return categorySoftSkills
+	}
+	return categoryOther
+}
+
+func isLowSignalTerm(term, category string, idf float64) bool {
+	if isDigitsOnly(term) {
+		return true
+	}
+	if _, ok := lowSignalTerms[term]; ok {
+		return true
+	}
+	// "Other" terms are shown only if they look highly distinctive.
+	if category == categoryOther && idf < highIDFOtherThreshold {
+		if len(term) <= 3 {
+			return true
+		}
+		if strings.HasSuffix(term, "ing") || strings.HasSuffix(term, "tion") || strings.HasSuffix(term, "ment") {
+			return true
+		}
+		if _, ok := lowSignalTerms[term]; ok {
+			return true
+		}
+	}
+	// Non-standard tokens are often parser noise.
+	if strings.Contains(term, "_") {
+		return true
+	}
+	return false
+}
+
+func isDigitsOnly(term string) bool {
+	if term == "" {
+		return false
+	}
+	for _, r := range term {
+		if !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return true
 }
 
 // stripAccents removes diacritics/accents from text using Unicode NFD

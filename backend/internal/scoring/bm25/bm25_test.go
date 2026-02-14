@@ -196,3 +196,42 @@ func TestLookupIDFDefaultUnknownWord(t *testing.T) {
 		t.Fatalf("expected default unknown IDF %f, got %f", defaultCorpusIDF, val)
 	}
 }
+
+func TestLowSignalTermsAreFilteredFromMissing(t *testing.T) {
+	resume := "python kubernetes docker"
+	job := "python kubernetes docker experience responsibilities years"
+
+	got, err := Compute(resume, job)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, missing := range got.MissingJobTerms {
+		if missing.Term == "experience" || missing.Term == "responsibilities" || missing.Term == "years" {
+			t.Fatalf("expected low-signal terms to be filtered, got %+v", got.MissingJobTerms)
+		}
+	}
+}
+
+func TestBucketedTopTermsClassifiesCoreSkills(t *testing.T) {
+	resume := "python aws docker scrum communication"
+	job := "python aws docker scrum communication"
+
+	got, err := Compute(resume, job)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(got.BucketedTopTerms[categoryLanguages]) == 0 {
+		t.Fatalf("expected language bucket to be populated, got %+v", got.BucketedTopTerms)
+	}
+	if len(got.BucketedTopTerms[categoryCloudDevOps]) == 0 {
+		t.Fatalf("expected cloud/devops/db bucket to be populated, got %+v", got.BucketedTopTerms)
+	}
+	if len(got.BucketedTopTerms[categoryPractices]) == 0 {
+		t.Fatalf("expected practices bucket to be populated, got %+v", got.BucketedTopTerms)
+	}
+	if len(got.BucketedTopTerms[categorySoftSkills]) == 0 {
+		t.Fatalf("expected soft skills bucket to be populated, got %+v", got.BucketedTopTerms)
+	}
+}

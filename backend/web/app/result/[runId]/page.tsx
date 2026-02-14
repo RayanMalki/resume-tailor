@@ -16,7 +16,14 @@ type BM25Signals = {
   top_job_terms: TermScore[];
   missing_job_terms: TermScore[];
   overlap_terms: string[];
+  bucketed_top_terms?: Record<string, TermScore[]>;
+  low_signal_terms?: TermScore[];
   score: number;
+};
+
+type InterviewQuestion = {
+  question: string;
+  answer_star: string[];
 };
 
 type ATSReport = {
@@ -24,10 +31,19 @@ type ATSReport = {
   notes: string[];
   change_plan: string[];
   summary: string;
+  interview_questions: InterviewQuestion[];
   bm25_signals: BM25Signals | null;
 };
 
-type Tab = "preview" | "report" | "latex";
+type Tab = "preview" | "report" | "cover" | "latex";
+
+const bucketOrder: Array<{ key: string; label: string }> = [
+  { key: "languages", label: "Languages" },
+  { key: "cloud_devops_db", label: "Cloud / DevOps / DB" },
+  { key: "practices", label: "Practices" },
+  { key: "soft_skills", label: "Soft Skills" },
+  { key: "other", label: "Other (high signal only)" }
+];
 
 /* ------------------------------------------------------------------ */
 /*  Skeleton components for loading states                            */
@@ -133,6 +149,8 @@ export default function ResultPage() {
   // ATS report state
   const [atsReport, setAtsReport] = useState<ATSReport | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
+  const [coverLetter, setCoverLetter] = useState<string | null>(null);
+  const [coverLetterLoading, setCoverLetterLoading] = useState(false);
 
   // Tab state
   const [activeTab, setActiveTab] = useState<Tab>("preview");
@@ -241,15 +259,36 @@ export default function ResultPage() {
               top_job_terms: Array.isArray(bm25Raw.top_job_terms) ? bm25Raw.top_job_terms : [],
               missing_job_terms: Array.isArray(bm25Raw.missing_job_terms) ? bm25Raw.missing_job_terms : [],
               overlap_terms: Array.isArray(bm25Raw.overlap_terms) ? bm25Raw.overlap_terms : [],
+              bucketed_top_terms:
+                bm25Raw.bucketed_top_terms && typeof bm25Raw.bucketed_top_terms === "object"
+                  ? bm25Raw.bucketed_top_terms as Record<string, TermScore[]>
+                  : undefined,
+              low_signal_terms: Array.isArray(bm25Raw.low_signal_terms) ? bm25Raw.low_signal_terms : [],
               score: typeof bm25Raw.score === "number" ? bm25Raw.score : 0,
             }
           : null;
+
+        const interviewQuestions = Array.isArray(inner.interview_questions)
+          ? inner.interview_questions
+            .filter((item: unknown) => item && typeof item === "object")
+            .map((item: unknown) => {
+              const asRecord = item as Record<string, unknown>;
+              return {
+                question: typeof asRecord.question === "string" ? asRecord.question : "",
+                answer_star: Array.isArray(asRecord.answer_star)
+                  ? asRecord.answer_star.filter((entry): entry is string => typeof entry === "string")
+                  : []
+              } as InterviewQuestion;
+            })
+            .filter((item: InterviewQuestion) => item.question.trim() !== "")
+          : [];
 
         return {
           score: typeof inner.score === "number" ? inner.score : 0,
           notes: Array.isArray(inner.notes) ? inner.notes : [],
           change_plan: changes,
           summary: typeof inner.summary === "string" ? inner.summary : "",
+          interview_questions: interviewQuestions,
           bm25_signals: bm25,
         };
       })();
@@ -258,6 +297,28 @@ export default function ResultPage() {
       // non-blocking
     } finally {
       setReportLoading(false);
+    }
+  }, [runId, router]);
+
+  const fetchCoverLetter = useCallback(async () => {
+    setCoverLetterLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/v1/runs/${runId}/artifacts/cover-letter`, {
+        credentials: "include",
+      });
+      if (res.status === 401) {
+        router.push("/login");
+        return;
+      }
+      if (!res.ok) return;
+      const data = await res.json();
+      if (typeof data.coverLetter === "string" && data.coverLetter.trim() !== "") {
+        setCoverLetter(data.coverLetter);
+      }
+    } catch {
+      // non-blocking
+    } finally {
+      setCoverLetterLoading(false);
     }
   }, [runId, router]);
 
@@ -403,7 +464,8 @@ export default function ResultPage() {
     if (!latex) return;
     fetchPDF();
     fetchReport();
-  }, [latex, fetchPDF, fetchReport]);
+    fetchCoverLetter();
+  }, [latex, fetchPDF, fetchReport, fetchCoverLetter]);
 
   /* ── Actions ────────────────────────────────────────────────── */
   const handleCopy = async () => {
@@ -449,6 +511,40 @@ export default function ResultPage() {
     }
   };
 
+  const handleDownloadDOCX = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/v1/runs/${runId}/artifacts/resume-docx`, {
+        credentials: "include",
+      });
+      if (res.status === 401) {
+        router.push("/login");
+        return;
+      }
+      if (!res.ok) throw new Error(res.status === 404 ? "DOCX not ready yet." : "Failed to fetch DOCX");
+      const buffer = await res.arrayBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "resume.docx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast("DOCX downloaded");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to download DOCX", "error");
+    }
+  };
+
+  const handleCopyCoverLetter = async () => {
+    if (!coverLetter) return;
+    await navigator.clipboard.writeText(coverLetter);
+    toast("Cover letter copied to clipboard");
+  };
+
   const handleGoToResume = () => router.push("/resume");
   const handleGoToJob = () => {
     if (resumeId) { router.push(`/job?resumeId=${resumeId}`); return; }
@@ -459,6 +555,7 @@ export default function ResultPage() {
   const tabs: { id: Tab; label: string }[] = [
     { id: "preview", label: "PDF Preview" },
     { id: "report", label: "ATS Report" },
+    { id: "cover", label: "Cover Letter" },
     { id: "latex", label: "LaTeX Source" },
   ];
 
@@ -547,6 +644,13 @@ export default function ResultPage() {
                   aria-label="Download resume as PDF"
                 >
                   {pdfLoading ? "Preparing\u2026" : "Download PDF"}
+                </button>
+                <button
+                  onClick={handleDownloadDOCX}
+                  className="rounded-full border border-emerald-500/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-emerald-200 transition hover:border-emerald-400 hover:text-white sm:tracking-[0.2em]"
+                  aria-label="Download resume as DOCX"
+                >
+                  Download DOCX
                 </button>
                 <button
                   onClick={handleCopy}
@@ -710,8 +814,111 @@ export default function ResultPage() {
                             </div>
                           </div>
                         )}
+
+                        {atsReport.bm25_signals.bucketed_top_terms && (
+                          <div className="mt-4">
+                            <p className="text-xs font-medium text-slate-300">Deterministic skill buckets</p>
+                            <div className="mt-2 space-y-2">
+                              {bucketOrder.map((bucket) => {
+                                const items = atsReport.bm25_signals?.bucketed_top_terms?.[bucket.key] || [];
+                                if (items.length === 0) return null;
+                                return (
+                                  <div key={bucket.key}>
+                                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                                      {bucket.label}
+                                    </p>
+                                    <div className="mt-1 flex flex-wrap gap-1.5">
+                                      {items.slice(0, 10).map((item) => {
+                                        const matched = atsReport.bm25_signals?.overlap_terms.includes(item.term);
+                                        return (
+                                          <span
+                                            key={`${bucket.key}:${item.term}`}
+                                            className={`rounded-full border px-2.5 py-1 text-xs ${
+                                              matched
+                                                ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
+                                                : "border-slate-600/40 bg-slate-500/10 text-slate-300"
+                                            }`}
+                                          >
+                                            {item.term}
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {Array.isArray(atsReport.bm25_signals.low_signal_terms) &&
+                          atsReport.bm25_signals.low_signal_terms.length > 0 && (
+                            <p className="mt-3 text-[11px] text-slate-500">
+                              {atsReport.bm25_signals.low_signal_terms.length} low-signal terms were filtered out
+                              from missing/top term lists.
+                            </p>
+                          )}
                       </div>
                     )}
+
+                    {/* Interview questions */}
+                    {atsReport.interview_questions.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-200">Likely interview questions</h4>
+                        <p className="mt-1 text-xs text-slate-400">
+                          Suggested STAR talking points based on your resume and this role.
+                        </p>
+                        <div className="mt-3 space-y-4">
+                          {atsReport.interview_questions.slice(0, 5).map((item, idx) => (
+                            <div key={`${item.question}-${idx}`} className="rounded-xl border border-white/10 bg-ink-900/50 p-3">
+                              <p className="text-sm font-medium text-ember-200">{idx + 1}. {item.question}</p>
+                              {item.answer_star.length > 0 && (
+                                <ul className="mt-2 space-y-1">
+                                  {item.answer_star.map((line, i) => (
+                                    <li key={i} className="text-xs text-slate-300">
+                                      • {line}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Cover Letter Tab ────────────────────────── */}
+              <div
+                id="panel-cover"
+                role="tabpanel"
+                aria-labelledby="tab-cover"
+                className={activeTab === "cover" ? "mt-4" : "hidden"}
+              >
+                {coverLetterLoading ? (
+                  <div className="space-y-4 rounded-2xl border border-white/10 bg-ink-950/60 p-6">
+                    <SkeletonBlock />
+                  </div>
+                ) : coverLetter ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Generated cover letter</p>
+                      <button
+                        onClick={handleCopyCoverLetter}
+                        className="rounded-full border border-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-slate-200 transition hover:border-ember-400 hover:text-ember-200"
+                      >
+                        Copy text
+                      </button>
+                    </div>
+                    <pre className="max-h-[520px] overflow-auto whitespace-pre-wrap rounded-2xl border border-white/10 bg-ink-950 p-4 text-sm leading-6 text-slate-200">
+                      {coverLetter}
+                    </pre>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-white/10 bg-ink-950/60 p-6">
+                    <p className="text-sm text-slate-400">Cover letter is still being generated. Refresh in a moment.</p>
                   </div>
                 )}
               </div>

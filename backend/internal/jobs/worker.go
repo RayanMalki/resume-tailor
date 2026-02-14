@@ -12,6 +12,7 @@ import (
 
 	"resume-tailor/internal/ai"
 	"resume-tailor/internal/artifacts"
+	"resume-tailor/internal/docx"
 	"resume-tailor/internal/latex"
 	"resume-tailor/internal/resumes"
 	"resume-tailor/internal/runreports"
@@ -218,8 +219,26 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		}
 	}
 
+	docxExists := false
+	if w.artifacts != nil {
+		if _, err := w.artifacts.GetByRunIDAndType(ctx, runID, artifacts.TypeResumeDOCX); err == nil {
+			docxExists = true
+		} else if err != nil && err != artifacts.ErrArtifactNotFound {
+			return fmt.Errorf("failed to check existing docx artifact: %w", err)
+		}
+	}
+
+	coverLetterExists := false
+	if w.artifacts != nil {
+		if _, err := w.artifacts.GetByRunIDAndType(ctx, runID, artifacts.TypeCoverLetter); err == nil {
+			coverLetterExists = true
+		} else if err != nil && err != artifacts.ErrArtifactNotFound {
+			return fmt.Errorf("failed to check existing cover letter artifact: %w", err)
+		}
+	}
+
 	needsReasons := len(runData.ProjectControls) > 0
-	if reportExists && latexExists && (pdfExists || !w.pdfEnabled) && (!needsReasons || reasonsExists) {
+	if reportExists && latexExists && docxExists && coverLetterExists && (pdfExists || !w.pdfEnabled) && (!needsReasons || reasonsExists) {
 		slog.Info("run report and artifacts already exist, skipping", "run_id", runID)
 		return nil
 	}
@@ -246,7 +265,7 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 	var latexDoc string
 	var spec ai.ResumeSpec
 	var specGenerated bool
-	if w.artifacts != nil && !latexExists {
+	if w.artifacts != nil && (!latexExists || !docxExists) {
 		if w.aiClient == nil {
 			return fmt.Errorf("ai client is not configured")
 		}
@@ -255,17 +274,38 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 			return fmt.Errorf("failed to generate resume spec: %w", err)
 		}
 		specGenerated = true
-		latexDoc = latex.RenderResume(spec)
-		if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeResumeLatex, latexDoc); err != nil {
-			return fmt.Errorf("failed to store resume latex: %w", err)
+		if !latexExists {
+			latexDoc = latex.RenderResume(spec)
+			if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeResumeLatex, latexDoc); err != nil {
+				return fmt.Errorf("failed to store resume latex: %w", err)
+			}
+			latexExists = true
 		}
-		latexExists = true
 	} else if latexExists && w.artifacts != nil {
 		existing, err := w.artifacts.GetByRunIDAndType(ctx, runID, artifacts.TypeResumeLatex)
 		if err != nil {
 			return fmt.Errorf("failed to load resume latex: %w", err)
 		}
 		latexDoc = existing.Content
+	}
+
+	// 4.1 Generate DOCX artifact for editable resume output.
+	if w.artifacts != nil && !docxExists {
+		if !specGenerated {
+			spec, err = w.aiClient.GenerateResumeSpec(ctx, resumeText, jobText, bm25Signals, runData.ProjectControls)
+			if err != nil {
+				return fmt.Errorf("failed to generate resume spec for docx: %w", err)
+			}
+			specGenerated = true
+		}
+		docxBytes, err := docx.RenderResume(spec)
+		if err != nil {
+			return fmt.Errorf("failed to render resume docx: %w", err)
+		}
+		encoded := base64.StdEncoding.EncodeToString(docxBytes)
+		if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeResumeDOCX, encoded); err != nil {
+			return fmt.Errorf("failed to store resume docx: %w", err)
+		}
 	}
 
 	// 5. Compute BM25 on TAILORED resume and generate report
@@ -391,6 +431,20 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 			} else if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeProjectReasons, string(reasonsJSON)); err != nil {
 				slog.Warn("failed to store project reasons artifact; continuing", "run_id", runID, "error", err)
 			}
+		}
+	}
+
+	// 8. Generate cover letter (best effort; does not fail the run)
+	if w.artifacts != nil && !coverLetterExists {
+		resumeLang := "French"
+		if specGenerated && strings.TrimSpace(spec.Language) != "" {
+			resumeLang = spec.Language
+		}
+		coverLetter, err := w.aiClient.GenerateCoverLetter(ctx, resumeText, jobText, bm25Signals, resumeLang)
+		if err != nil {
+			slog.Warn("failed to generate cover letter; continuing without cover letter artifact", "run_id", runID, "error", err)
+		} else if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeCoverLetter, coverLetter); err != nil {
+			slog.Warn("failed to store cover letter artifact; continuing", "run_id", runID, "error", err)
 		}
 	}
 
