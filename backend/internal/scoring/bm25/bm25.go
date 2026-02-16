@@ -2,6 +2,7 @@ package bm25
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strings"
@@ -46,12 +47,26 @@ type Signals struct {
 	DisciplineEvidence []TermScore `json:"discipline_evidence,omitempty"`
 	// ProfileVersion identifies the profile dictionary version used for scoring.
 	ProfileVersion string `json:"profile_version,omitempty"`
-	// Score is IDF-weighted keyword coverage in [0,1]:
-	// matched job-term weight / total job-term weight.
+	// Score is normalized IDF-weighted keyword coverage in [0,1].
+	// Derived from RawCoverage via sqrt transformation for intuitive scaling.
 	Score float64 `json:"score"`
+	// RawCoverage is the un-normalized matched/total weight ratio for diagnostics.
+	RawCoverage float64 `json:"raw_coverage"`
 	// BM25Score is the raw 2-document BM25 score (resume scored against job query).
 	// It is exposed for diagnostics only and is not used as ATS compatibility score.
 	BM25Score float64 `json:"bm25_score"`
+}
+
+// NormalizeCoverageScore applies a sqrt curve to lift mid-range coverage
+// values into a more intuitive range while preserving 0→0 and 1→1 boundaries.
+func NormalizeCoverageScore(raw float64) float64 {
+	if raw <= 0 {
+		return 0
+	}
+	if raw >= 1 {
+		return 1
+	}
+	return math.Sqrt(raw)
 }
 
 // Compute calculates BM25 signals for resume and job text matching.
@@ -170,9 +185,11 @@ func ComputeWithProfile(resumeText, jobText string, profile profiles.Profile) (S
 		topTerms = topTerms[:defaultTopN]
 	}
 
+	rawCoverage := 0.0
 	coverageScore := 0.0
 	if totalWeight > 0 {
-		coverageScore = matchedWeight / totalWeight
+		rawCoverage = matchedWeight / totalWeight
+		coverageScore = NormalizeCoverageScore(rawCoverage)
 	}
 	categoryCoverage := make(map[string]float64, len(bucketTotals))
 	for bucket, total := range bucketTotals {
@@ -192,6 +209,7 @@ func ComputeWithProfile(resumeText, jobText string, profile profiles.Profile) (S
 		Discipline:       string(profile.Discipline),
 		ProfileVersion:   profile.Version,
 		Score:            coverageScore,
+		RawCoverage:      rawCoverage,
 		BM25Score:        bm25Score,
 	}, nil
 }

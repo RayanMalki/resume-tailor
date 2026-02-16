@@ -127,12 +127,23 @@ func TestWeightedCoveragePrioritizesImportantTerms(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// api IDF(2.5) vs kubernetes IDF(4.5) => coverage should be about 2.5/7.0
-	if got.Score >= 0.5 {
-		t.Fatalf("expected weighted coverage below 0.5, got %.4f", got.Score)
+	// api IDF(2.5) vs kubernetes IDF(4.5) => raw coverage ≈ 2.5/7.0 ≈ 0.357
+	// normalized via sqrt ≈ 0.597
+	if got.RawCoverage >= 0.5 {
+		t.Fatalf("expected raw coverage below 0.5, got %.4f", got.RawCoverage)
 	}
-	if got.Score <= 0.28 {
-		t.Fatalf("expected weighted coverage above 0.28, got %.4f", got.Score)
+	if got.RawCoverage <= 0.28 {
+		t.Fatalf("expected raw coverage above 0.28, got %.4f", got.RawCoverage)
+	}
+	// Normalized score should be higher than raw
+	if got.Score <= got.RawCoverage {
+		t.Fatalf("expected normalized score > raw coverage, got score=%.4f raw=%.4f", got.Score, got.RawCoverage)
+	}
+	if got.Score >= 0.70 {
+		t.Fatalf("expected normalized score below 0.70, got %.4f", got.Score)
+	}
+	if got.Score <= 0.50 {
+		t.Fatalf("expected normalized score above 0.50, got %.4f", got.Score)
 	}
 }
 
@@ -286,4 +297,60 @@ func TestComputeWithProfileHidesLowSignalOtherTerms(t *testing.T) {
 	if !foundCritical {
 		t.Fatalf("expected high-signal term do178 to remain visible, got %+v", got.MissingJobTerms)
 	}
+}
+
+func TestNormalizeCoverageScore(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  float64
+		want float64
+	}{
+		{"zero", 0.0, 0.0},
+		{"one", 1.0, 1.0},
+		{"negative", -0.5, 0.0},
+		{"above_one", 1.5, 1.0},
+		{"sqrt_0.25", 0.25, 0.5},
+		{"sqrt_0.64", 0.64, 0.8},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NormalizeCoverageScore(tt.raw)
+			if diff := got - tt.want; diff > 1e-9 || diff < -1e-9 {
+				t.Fatalf("NormalizeCoverageScore(%f) = %f, want %f", tt.raw, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAllCanonicalTermsHaveIDF(t *testing.T) {
+	allProfiles := profiles.GetAll()
+	if len(allProfiles) == 0 {
+		t.Fatal("expected at least one profile from GetAll()")
+	}
+
+	var missing []string
+	for discipline, p := range allProfiles {
+		for term := range p.CanonicalTerms {
+			if !hasExplicitIDF(term) {
+				missing = append(missing, string(discipline)+":"+term)
+			}
+		}
+	}
+	if len(missing) > 0 {
+		t.Fatalf("canonical terms with no IDF entry (falling to defaults): %v", missing)
+	}
+}
+
+// hasExplicitIDF checks whether a term resolves to an explicit corpusIDF entry
+// (directly or via canonicalize), as opposed to falling back to a default.
+func hasExplicitIDF(term string) bool {
+	if _, ok := corpusIDF[term]; ok {
+		return true
+	}
+	if canon := canonicalize(term); canon != term {
+		if _, ok := corpusIDF[canon]; ok {
+			return true
+		}
+	}
+	return false
 }
