@@ -8,9 +8,7 @@ services:
     startCommand: ./bin/api
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: resume-tailor-db
-          property: connectionString
+        sync: false
       - key: FRONTEND_ORIGIN
         value: "https://www.resumetailor.live,https://resumetailor.live"
       - key: OPENAI_API_KEY
@@ -34,9 +32,7 @@ services:
     startCommand: ./bin/worker
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: resume-tailor-db
-          property: connectionString
+        sync: false
       - key: WORKER_ID
         value: "worker-1"
       - key: OPENAI_API_KEY
@@ -61,6 +57,3 @@ services:
         value: "https://resume-tailor-api-m106.onrender.com"
       - key: NEXT_PUBLIC_SITE_URL
         value: "https://www.resumetailor.live"
-databases:
-  - name: resume-tailor-db
-    plan: free
