@@ -23,6 +23,18 @@ services:
         value: ".resumetailor.live"
       - key: GOOGLE_REDIRECT_URL
         value: "https://www.resumetailor.live/api/v1/auth/google/callback"
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: DISCORD_WEBHOOK_URL
+        sync: false
+      - key: EMAIL_PROVIDER
+        value: "resend"
+      - key: EMAIL_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
   - type: worker
     name: resume-tailor-worker
     rootDir: backend
