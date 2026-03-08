@@ -242,6 +242,11 @@ func (s *Service) RemoveAPIKey(ctx context.Context, userID uuid.UUID) error {
 	return s.repo.SetEncryptedAPIKey(ctx, userID, nil)
 }
 
+// MarkOnboardingSeen sets the onboarding_seen flag to true for the user.
+func (s *Service) MarkOnboardingSeen(ctx context.Context, userID uuid.UUID) error {
+	return s.repo.SetOnboardingSeen(ctx, userID)
+}
+
 // DeleteAccount permanently deletes the user and all their data.
 func (s *Service) DeleteAccount(ctx context.Context, userID uuid.UUID) error {
 	return s.repo.DeleteUser(ctx, userID)
