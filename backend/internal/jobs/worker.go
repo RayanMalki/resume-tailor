@@ -654,7 +654,7 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 
 				// Generate cover letter PDF
 				if w.pdfEnabled && !coverLetterPDFExists {
-					clLatex := latex.RenderCoverLetter(clName, clContact, coverLetter)
+					clLatex := latex.RenderCoverLetter(clName, spec.Contact, coverLetter)
 					pdfBytes, err := latex.CompilePDF(ctx, w.tectonicBin, clLatex)
 					if err != nil {
 						slog.Warn("failed to compile cover letter pdf; continuing", "run_id", runID, "error", err)
