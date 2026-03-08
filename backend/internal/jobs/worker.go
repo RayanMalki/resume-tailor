@@ -13,6 +13,7 @@ import (
 
 	"resume-tailor/internal/ai"
 	"resume-tailor/internal/artifacts"
+	"resume-tailor/internal/crypto"
 	"resume-tailor/internal/docx"
 	"resume-tailor/internal/latex"
 	"resume-tailor/internal/resumes"
@@ -45,9 +46,15 @@ type RunsRepo interface {
 	UpdateRunDiscipline(ctx context.Context, runID uuid.UUID, discipline string, confidence float64, source string) error
 }
 
+// UserKeyRepo provides per-user encrypted API key lookup.
+type UserKeyRepo interface {
+	GetEncryptedOpenAIKey(ctx context.Context, userID uuid.UUID) (*string, error)
+}
+
 // RunData represents the run data needed by the worker
 type RunData struct {
 	ID               uuid.UUID
+	UserID           uuid.UUID
 	ResumeID         uuid.UUID
 	JobText          string
 	ProjectControls  []ai.ProjectControl
@@ -59,21 +66,24 @@ type RunData struct {
 }
 
 type Worker struct {
-	jobsRepo       *Repo
-	db             *pgxpool.Pool
-	workerID       string
-	reportsSvc     *runreports.Service
-	runsRepo       RunsRepo
-	resumesRepo    *resumes.Repo
-	aiClient       *ai.Client
-	artifacts      *artifacts.Service
-	pdfEnabled     bool
-	tectonicBin    string
-	jobTimeout     time.Duration
-	disciplineMode string
+	jobsRepo         *Repo
+	db               *pgxpool.Pool
+	workerID         string
+	reportsSvc       *runreports.Service
+	runsRepo         RunsRepo
+	resumesRepo      *resumes.Repo
+	aiClient         *ai.Client
+	artifacts        *artifacts.Service
+	pdfEnabled       bool
+	tectonicBin      string
+	jobTimeout       time.Duration
+	disciplineMode   string
+	userKeyRepo      UserKeyRepo
+	apiKeyEncSecret  string
+	openAIModel      string
 }
 
-func NewWorker(jobsRepo *Repo, db *pgxpool.Pool, workerID string, reportsSvc *runreports.Service, runsRepo RunsRepo, resumesRepo *resumes.Repo, aiClient *ai.Client, artifactsSvc *artifacts.Service, pdfEnabled bool, tectonicBin string, jobTimeout time.Duration, disciplineMode string) *Worker {
+func NewWorker(jobsRepo *Repo, db *pgxpool.Pool, workerID string, reportsSvc *runreports.Service, runsRepo RunsRepo, resumesRepo *resumes.Repo, aiClient *ai.Client, artifactsSvc *artifacts.Service, pdfEnabled bool, tectonicBin string, jobTimeout time.Duration, disciplineMode string, userKeyRepo UserKeyRepo, apiKeyEncSecret, openAIModel string) *Worker {
 	if jobTimeout <= 0 {
 		jobTimeout = defaultJobTimeout
 	}
@@ -86,18 +96,21 @@ func NewWorker(jobsRepo *Repo, db *pgxpool.Pool, workerID string, reportsSvc *ru
 		disciplineMode = "enforce"
 	}
 	return &Worker{
-		jobsRepo:       jobsRepo,
-		db:             db,
-		workerID:       workerID,
-		reportsSvc:     reportsSvc,
-		runsRepo:       runsRepo,
-		resumesRepo:    resumesRepo,
-		aiClient:       aiClient,
-		artifacts:      artifactsSvc,
-		pdfEnabled:     pdfEnabled,
-		tectonicBin:    tectonicBin,
-		jobTimeout:     jobTimeout,
-		disciplineMode: disciplineMode,
+		jobsRepo:        jobsRepo,
+		db:              db,
+		workerID:        workerID,
+		reportsSvc:      reportsSvc,
+		runsRepo:        runsRepo,
+		resumesRepo:     resumesRepo,
+		aiClient:        aiClient,
+		artifacts:       artifactsSvc,
+		pdfEnabled:      pdfEnabled,
+		tectonicBin:     tectonicBin,
+		jobTimeout:      jobTimeout,
+		disciplineMode:  disciplineMode,
+		userKeyRepo:     userKeyRepo,
+		apiKeyEncSecret: apiKeyEncSecret,
+		openAIModel:     openAIModel,
 	}
 }
 
@@ -189,15 +202,27 @@ func (w *Worker) processNextJob(ctx context.Context) error {
 }
 
 func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
-	// Check if AI client is available
-	if w.aiClient == nil {
-		return fmt.Errorf("OPENAI_API_KEY missing")
-	}
-
 	// 1. Load the run
 	runData, err := w.runsRepo.GetRunByID(ctx, runID)
 	if err != nil {
 		return fmt.Errorf("failed to load run: %w", err)
+	}
+
+	// Resolve effective AI client: prefer per-user key, fall back to global.
+	effectiveClient := w.aiClient
+	if w.userKeyRepo != nil && w.apiKeyEncSecret != "" && runData.UserID != uuid.Nil {
+		if enc, err := w.userKeyRepo.GetEncryptedOpenAIKey(ctx, runData.UserID); err == nil && enc != nil {
+			if plain, err := crypto.Decrypt(w.apiKeyEncSecret, *enc); err == nil && plain != "" {
+				if c, err := ai.NewClientFromEnv(plain, w.openAIModel); err == nil {
+					effectiveClient = c
+					slog.Info("using per-user OpenAI key", "run_id", runID, "user_id", runData.UserID)
+				}
+			}
+		}
+	}
+
+	if effectiveClient == nil {
+		return fmt.Errorf("OPENAI_API_KEY missing")
 	}
 
 	reportExists := false
@@ -359,10 +384,7 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 	var spec ai.ResumeSpec
 	var specGenerated bool
 	if w.artifacts != nil && (!latexExists || !docxExists) {
-		if w.aiClient == nil {
-			return fmt.Errorf("ai client is not configured")
-		}
-		spec, err = w.aiClient.GenerateResumeSpec(ctx, resumeText, jobText, bm25Signals, runData.ProjectControls, ai.DisciplineContext{
+		spec, err = effectiveClient.GenerateResumeSpec(ctx, resumeText, jobText, bm25Signals, runData.ProjectControls, ai.DisciplineContext{
 			Discipline:    string(effectiveDiscipline),
 			RoleFocus:     effectiveProfile.PromptHints.RoleFocus,
 			EvidenceFocus: effectiveProfile.PromptHints.EvidenceFocus,
@@ -390,7 +412,7 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 	// 4.1 Generate DOCX artifact for editable resume output.
 	if w.artifacts != nil && !docxExists {
 		if !specGenerated {
-			spec, err = w.aiClient.GenerateResumeSpec(ctx, resumeText, jobText, bm25Signals, runData.ProjectControls, ai.DisciplineContext{
+			spec, err = effectiveClient.GenerateResumeSpec(ctx, resumeText, jobText, bm25Signals, runData.ProjectControls, ai.DisciplineContext{
 				Discipline:    string(effectiveDiscipline),
 				RoleFocus:     effectiveProfile.PromptHints.RoleFocus,
 				EvidenceFocus: effectiveProfile.PromptHints.EvidenceFocus,
@@ -462,7 +484,7 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		}
 
 		// Generate summary + notes from AI (no change plan — that's computed above)
-		atsReport, _, err := w.aiClient.GenerateRunReport(ctx, addedKeywords, missingNames, resumeLang, ai.DisciplineContext{
+		atsReport, _, err := effectiveClient.GenerateRunReport(ctx, addedKeywords, missingNames, resumeLang, ai.DisciplineContext{
 			Discipline: string(effectiveDiscipline),
 			RoleFocus:  effectiveProfile.PromptHints.RoleFocus,
 		})
@@ -563,7 +585,7 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				reasons, err := w.aiClient.GenerateProjectReasons(ctx, resumeText, jobText, latexDoc, bm25Signals, runData.ProjectControls)
+				reasons, err := effectiveClient.GenerateProjectReasons(ctx, resumeText, jobText, latexDoc, bm25Signals, runData.ProjectControls)
 				if err != nil {
 					slog.Warn("failed to generate project reasons; continuing without project reasons artifact", "run_id", runID, "error", err)
 					return
@@ -591,7 +613,7 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 
 				var coverLetter string
 				if !coverLetterExists {
-					cl, err := w.aiClient.GenerateCoverLetter(ctx, resumeText, jobText, bm25Signals, resumeLang, ai.DisciplineContext{
+					cl, err := effectiveClient.GenerateCoverLetter(ctx, resumeText, jobText, bm25Signals, resumeLang, ai.DisciplineContext{
 						Discipline:    string(effectiveDiscipline),
 						RoleFocus:     effectiveProfile.PromptHints.RoleFocus,
 						EvidenceFocus: effectiveProfile.PromptHints.EvidenceFocus,
