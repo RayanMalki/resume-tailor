@@ -610,10 +610,11 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 				if specGenerated && strings.TrimSpace(spec.Language) != "" {
 					resumeLang = spec.Language
 				}
+				coverLetterLang := chooseCoverLetterLanguage(resumeLang, resumeText, jobText)
 
 				var coverLetter string
 				if !coverLetterExists {
-					cl, err := effectiveClient.GenerateCoverLetter(ctx, resumeText, jobText, bm25Signals, resumeLang, ai.DisciplineContext{
+					cl, err := effectiveClient.GenerateCoverLetter(ctx, resumeText, jobText, bm25Signals, coverLetterLang, ai.DisciplineContext{
 						Discipline:    string(effectiveDiscipline),
 						RoleFocus:     effectiveProfile.PromptHints.RoleFocus,
 						EvidenceFocus: effectiveProfile.PromptHints.EvidenceFocus,
@@ -641,7 +642,7 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 
 				// Generate cover letter DOCX
 				if !coverLetterDOCXExists {
-					clDocxBytes, err := docx.RenderCoverLetter(clName, clContact, coverLetter)
+					clDocxBytes, err := docx.RenderCoverLetterWithLanguage(clName, clContact, coverLetter, coverLetterLang)
 					if err != nil {
 						slog.Warn("failed to render cover letter docx; continuing", "run_id", runID, "error", err)
 					} else {
@@ -654,7 +655,7 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 
 				// Generate cover letter PDF
 				if w.pdfEnabled && !coverLetterPDFExists {
-					clLatex := latex.RenderCoverLetter(clName, spec.Contact, coverLetter)
+					clLatex := latex.RenderCoverLetter(clName, spec.Contact, coverLetter, coverLetterLang)
 					pdfBytes, err := latex.CompilePDF(ctx, w.tectonicBin, clLatex)
 					if err != nil {
 						slog.Warn("failed to compile cover letter pdf; continuing", "run_id", runID, "error", err)
@@ -736,6 +737,94 @@ func clamp01(v float64) float64 {
 		return 1
 	}
 	return v
+}
+
+func chooseCoverLetterLanguage(resumeLang, resumeText, jobText string) string {
+	resumeNormalized := normalizeLanguageName(resumeLang)
+	resumeDetected := detectTextLanguage(resumeText)
+	jobDetected := detectTextLanguage(jobText)
+
+	switch {
+	case resumeDetected != "" && resumeDetected == jobDetected:
+		return resumeDetected
+	case resumeNormalized != "" && resumeNormalized == jobDetected:
+		return resumeNormalized
+	case resumeNormalized != "" && resumeNormalized == resumeDetected:
+		return resumeNormalized
+	case jobDetected != "" && resumeDetected == "":
+		return jobDetected
+	case resumeNormalized != "":
+		return resumeNormalized
+	case resumeDetected != "":
+		return resumeDetected
+	case jobDetected != "":
+		return jobDetected
+	default:
+		return "English"
+	}
+}
+
+func normalizeLanguageName(language string) string {
+	lang := strings.ToLower(strings.TrimSpace(language))
+	switch {
+	case strings.HasPrefix(lang, "fr"), strings.Contains(lang, "french"), strings.Contains(lang, "francais"):
+		return "French"
+	case strings.HasPrefix(lang, "en"), strings.Contains(lang, "english"), strings.Contains(lang, "anglais"):
+		return "English"
+	default:
+		return ""
+	}
+}
+
+func detectTextLanguage(text string) string {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return ""
+	}
+	lower := " " + strings.ToLower(trimmed) + " "
+
+	frenchMarkers := []string{
+		" le ", " la ", " les ", " des ", " une ", " un ", " et ", " avec ", " pour ", " dans ",
+		" sur ", " projet ", " projets ", " competences ", " ingenieur ", " stage ", " stages ",
+		" responsabilites ", " developp",
+	}
+	englishMarkers := []string{
+		" the ", " and ", " with ", " for ", " in ", " on ", " project ", " projects ", " skills ",
+		" engineer ", " internship ", " internships ", " responsibilities ", " developed ", " building ", " using ",
+	}
+
+	frenchScore := countLanguageMarkers(lower, frenchMarkers) + countFrenchAccents(lower)
+	englishScore := countLanguageMarkers(lower, englishMarkers)
+
+	if frenchScore == 0 && englishScore == 0 {
+		return ""
+	}
+	if frenchScore >= englishScore+3 {
+		return "French"
+	}
+	if englishScore >= frenchScore+3 {
+		return "English"
+	}
+	return ""
+}
+
+func countLanguageMarkers(text string, markers []string) int {
+	score := 0
+	for _, marker := range markers {
+		score += strings.Count(text, marker)
+	}
+	return score
+}
+
+func countFrenchAccents(text string) int {
+	score := 0
+	for _, r := range text {
+		switch r {
+		case 'é', 'è', 'ê', 'ë', 'à', 'â', 'ç', 'î', 'ï', 'ô', 'ù', 'û', 'ü', 'œ', 'æ':
+			score++
+		}
+	}
+	return score
 }
 
 func fallbackATSReport(addedKeywords, missingKeywords []string, resumeLang string) ai.ATSReport {
