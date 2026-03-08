@@ -49,11 +49,12 @@ func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes
 			r.Use(middleware.AuthRequired(authSvc))
 
 			//GET request
-			r.Get("/me", handlers.Me(authSvc))
+			r.Get("/me", handlers.Me(authSvc, runsSvc))
 			r.Put("/me/password", handlers.MeUpdatePassword(authSvc))
 			r.Delete("/me", handlers.MeDelete(authSvc))
 			r.Put("/me/api-key", handlers.MeAPIKeyPut(authSvc, apiKeyEncSecret))
 			r.Delete("/me/api-key", handlers.MeAPIKeyDelete(authSvc))
+			r.Post("/me/onboarding-seen", handlers.MeOnboardingSeen(authSvc))
 			r.Get("/runs/{runID}", handlers.GetRunByIdHandler(runsSvc))
 			r.Get("/runs/{runID}/report", handlers.GetRunReportHandler(runsSvc, reportsSvc))
 			r.Get("/runs/{runID}/artifacts/resume-latex", handlers.GetResumeLatexArtifactHandler(runsSvc, artifactsSvc))
@@ -68,7 +69,7 @@ func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes
 			r.Get("/resumes/{resumeID}", handlers.GetResumeByIDHandler(resumesSvc))
 
 			//POST request
-			r.Post("/runs", handlers.CreateRunHandler(runsSvc, resumesSvc))
+			r.Post("/runs", handlers.CreateRunHandler(runsSvc, resumesSvc, authSvc))
 			r.Post("/disciplines/detect", handlers.DetectDisciplineHandler(resumesSvc))
 			r.Post("/resumes", handlers.CreateResumeHandler(resumesSvc))
 			r.Post("/resumes/upload", handlers.UploadResumeHandler(resumesSvc))
