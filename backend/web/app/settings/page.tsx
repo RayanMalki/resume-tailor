@@ -206,6 +206,20 @@ export default function SettingsPage() {
           <p className="mb-4 text-xs text-slate-400">
             Your key is encrypted server-side and used instead of the shared key when you run an analysis. The model remains unchanged.
           </p>
+
+          {/* Security disclaimer */}
+          <div className="mb-5 rounded-xl border border-white/10 bg-ink-950/60 p-4">
+            <p className="mb-2 text-xs font-semibold text-slate-300">
+              🔒 How we protect your key
+            </p>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Your key is encrypted with <span className="text-slate-300">AES-256-GCM</span> before
+              it is stored. The encryption secret lives only on the server — never in the database.
+              Even a complete database dump cannot expose your key. It is decrypted in memory only
+              during an analysis run and is never sent back to your browser.
+            </p>
+          </div>
+
           {me?.hasApiKey && (
             <p className="mb-3 text-xs text-green-400">A personal API key is currently saved.</p>
           )}
