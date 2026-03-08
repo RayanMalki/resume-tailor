@@ -11,6 +11,7 @@ import (
 
 	"resume-tailor/internal/ai"
 	"resume-tailor/internal/artifacts"
+	"resume-tailor/internal/auth"
 	"resume-tailor/internal/config"
 	"resume-tailor/internal/db"
 	"resume-tailor/internal/jobs"
@@ -56,6 +57,7 @@ func main() {
 	resumesRepo := resumes.NewRepo(pool)
 	artifactsRepo := artifacts.NewRepo(pool)
 	artifactsSvc := artifacts.NewService(artifactsRepo)
+	authRepo := auth.NewRepo(pool)
 
 	// Create adapter to avoid import cycle
 	runsRepo := &runsRepoAdapter{repo: runsRepoRaw}
@@ -87,6 +89,9 @@ func main() {
 		cfg.TectonicBin,
 		cfg.WorkerJobTimeout,
 		cfg.DisciplineMode,
+		authRepo,
+		cfg.APIKeyEncryptionSecret,
+		cfg.OpenAIModel,
 	)
 
 	// Handle graceful shutdown
@@ -130,6 +135,7 @@ func (a *runsRepoAdapter) GetRunByID(ctx context.Context, runID uuid.UUID) (jobs
 	}
 	return jobs.RunData{
 		ID:               run.ID,
+		UserID:           run.UserID,
 		ResumeID:         run.ResumeID,
 		JobText:          run.JobText,
 		ProjectControls:  mapProjectControls(run.ProjectControls),
