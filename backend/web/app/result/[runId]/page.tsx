@@ -54,7 +54,7 @@ const bucketOrder: Array<{ key: string; label: string }> = [
   { key: "cloud_devops_db", label: "Cloud / DevOps / DB" },
   { key: "practices", label: "Practices" },
   { key: "soft_skills", label: "Soft Skills" },
-  { key: "other", label: "Other (high signal only)" }
+  { key: "other", label: "Other (high signal only)" },
 ];
 
 const disciplineLabels: Record<string, string> = {
@@ -70,11 +70,7 @@ const disciplineLabels: Record<string, string> = {
 /* ------------------------------------------------------------------ */
 
 function SkeletonLine({ className = "" }: { className?: string }) {
-  return (
-    <div
-      className={`animate-pulse rounded-lg bg-white/5 ${className}`}
-    />
-  );
+  return <div className={`animate-pulse rounded-lg bg-white/5 ${className}`} />;
 }
 
 function SkeletonBlock() {
@@ -115,7 +111,13 @@ function ScoreRing({ score }: { score: number }) {
 
   return (
     <div className="relative inline-flex items-center justify-center">
-      <svg width="100" height="100" viewBox="0 0 100 100" role="img" aria-label={`ATS score: ${pct}%`}>
+      <svg
+        width="100"
+        height="100"
+        viewBox="0 0 100 100"
+        role="img"
+        aria-label={`ATS score: ${pct}%`}
+      >
         <circle
           cx="50"
           cy="50"
@@ -169,8 +171,8 @@ export default function ResultPage() {
   // ATS report state
   const [atsReport, setAtsReport] = useState<ATSReport | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
-  const [coverLetter, setCoverLetter] = useState<string | null>(null);
-  const [coverLetterLoading, setCoverLetterLoading] = useState(false);
+  const [coverLetterPdfUrl, setCoverLetterPdfUrl] = useState<string | null>(null);
+  const [coverLetterPdfLoading, setCoverLetterPdfLoading] = useState(false);
 
   // Tab state
   const [activeTab, setActiveTab] = useState<Tab>("preview");
@@ -181,12 +183,18 @@ export default function ResultPage() {
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pollStartRef = useRef(Date.now());
 
-  // Cleanup PDF blob URL on unmount
+  // Cleanup PDF blob URLs on unmount
   useEffect(() => {
     return () => {
       if (pdfUrl) URL.revokeObjectURL(pdfUrl);
     };
   }, [pdfUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (coverLetterPdfUrl) URL.revokeObjectURL(coverLetterPdfUrl);
+    };
+  }, [coverLetterPdfUrl]);
 
   const loadingMessage = useMemo(() => {
     if (latex) return "Ready";
@@ -205,7 +213,10 @@ export default function ResultPage() {
           const target = targetProgressRef.current;
           if (prev >= target) return prev;
           // Move 1-3% toward the target each tick for a smooth feel
-          return Math.min(target, prev + Math.max(1, Math.floor((target - prev) / 4)));
+          return Math.min(
+            target,
+            prev + Math.max(1, Math.floor((target - prev) / 4)),
+          );
         });
       }, 300);
     }
@@ -219,9 +230,12 @@ export default function ResultPage() {
     setPdfLoading(true);
     setPdfError(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/v1/runs/${runId}/artifacts/resume-pdf`, {
-        credentials: "include",
-      });
+      const res = await fetch(
+        `${API_BASE_URL}/v1/runs/${runId}/artifacts/resume-pdf`,
+        {
+          credentials: "include",
+        },
+      );
       if (res.status === 401) {
         router.push("/login");
         return;
@@ -274,40 +288,67 @@ export default function ResultPage() {
 
         // Extract BM25 signals
         const bm25Raw = obj.bm25_signals;
-        const bm25: BM25Signals | null = bm25Raw && typeof bm25Raw === "object"
-          ? {
-              top_job_terms: Array.isArray(bm25Raw.top_job_terms) ? bm25Raw.top_job_terms : [],
-              missing_job_terms: Array.isArray(bm25Raw.missing_job_terms) ? bm25Raw.missing_job_terms : [],
-              overlap_terms: Array.isArray(bm25Raw.overlap_terms) ? bm25Raw.overlap_terms : [],
-              bucketed_top_terms:
-                bm25Raw.bucketed_top_terms && typeof bm25Raw.bucketed_top_terms === "object"
-                  ? bm25Raw.bucketed_top_terms as Record<string, TermScore[]>
-                  : undefined,
-              low_signal_terms: Array.isArray(bm25Raw.low_signal_terms) ? bm25Raw.low_signal_terms : [],
-              category_coverage:
-                bm25Raw.category_coverage && typeof bm25Raw.category_coverage === "object"
-                  ? bm25Raw.category_coverage as Record<string, number>
-                  : undefined,
-              discipline: typeof bm25Raw.discipline === "string" ? bm25Raw.discipline : undefined,
-              discipline_evidence: Array.isArray(bm25Raw.discipline_evidence) ? bm25Raw.discipline_evidence : [],
-              profile_version: typeof bm25Raw.profile_version === "string" ? bm25Raw.profile_version : undefined,
-              score: typeof bm25Raw.score === "number" ? bm25Raw.score : 0,
-            }
-          : null;
+        const bm25: BM25Signals | null =
+          bm25Raw && typeof bm25Raw === "object"
+            ? {
+                top_job_terms: Array.isArray(bm25Raw.top_job_terms)
+                  ? bm25Raw.top_job_terms
+                  : [],
+                missing_job_terms: Array.isArray(bm25Raw.missing_job_terms)
+                  ? bm25Raw.missing_job_terms
+                  : [],
+                overlap_terms: Array.isArray(bm25Raw.overlap_terms)
+                  ? bm25Raw.overlap_terms
+                  : [],
+                bucketed_top_terms:
+                  bm25Raw.bucketed_top_terms &&
+                  typeof bm25Raw.bucketed_top_terms === "object"
+                    ? (bm25Raw.bucketed_top_terms as Record<
+                        string,
+                        TermScore[]
+                      >)
+                    : undefined,
+                low_signal_terms: Array.isArray(bm25Raw.low_signal_terms)
+                  ? bm25Raw.low_signal_terms
+                  : [],
+                category_coverage:
+                  bm25Raw.category_coverage &&
+                  typeof bm25Raw.category_coverage === "object"
+                    ? (bm25Raw.category_coverage as Record<string, number>)
+                    : undefined,
+                discipline:
+                  typeof bm25Raw.discipline === "string"
+                    ? bm25Raw.discipline
+                    : undefined,
+                discipline_evidence: Array.isArray(bm25Raw.discipline_evidence)
+                  ? bm25Raw.discipline_evidence
+                  : [],
+                profile_version:
+                  typeof bm25Raw.profile_version === "string"
+                    ? bm25Raw.profile_version
+                    : undefined,
+                score: typeof bm25Raw.score === "number" ? bm25Raw.score : 0,
+              }
+            : null;
 
         const interviewQuestions = Array.isArray(inner.interview_questions)
           ? inner.interview_questions
-            .filter((item: unknown) => item && typeof item === "object")
-            .map((item: unknown) => {
-              const asRecord = item as Record<string, unknown>;
-              return {
-                question: typeof asRecord.question === "string" ? asRecord.question : "",
-                answer_star: Array.isArray(asRecord.answer_star)
-                  ? asRecord.answer_star.filter((entry): entry is string => typeof entry === "string")
-                  : []
-              } as InterviewQuestion;
-            })
-            .filter((item: InterviewQuestion) => item.question.trim() !== "")
+              .filter((item: unknown) => item && typeof item === "object")
+              .map((item: unknown) => {
+                const asRecord = item as Record<string, unknown>;
+                return {
+                  question:
+                    typeof asRecord.question === "string"
+                      ? asRecord.question
+                      : "",
+                  answer_star: Array.isArray(asRecord.answer_star)
+                    ? asRecord.answer_star.filter(
+                        (entry): entry is string => typeof entry === "string",
+                      )
+                    : [],
+                } as InterviewQuestion;
+              })
+              .filter((item: InterviewQuestion) => item.question.trim() !== "")
           : [];
 
         return {
@@ -317,17 +358,32 @@ export default function ResultPage() {
           summary: typeof inner.summary === "string" ? inner.summary : "",
           interview_questions: interviewQuestions,
           bm25_signals: bm25,
-          discipline: typeof obj.discipline === "string" ? obj.discipline : undefined,
-          discipline_confidence: typeof obj.discipline_confidence === "number" ? obj.discipline_confidence : undefined,
-          discipline_source: typeof obj.discipline_source === "string" ? obj.discipline_source : undefined,
+          discipline:
+            typeof obj.discipline === "string" ? obj.discipline : undefined,
+          discipline_confidence:
+            typeof obj.discipline_confidence === "number"
+              ? obj.discipline_confidence
+              : undefined,
+          discipline_source:
+            typeof obj.discipline_source === "string"
+              ? obj.discipline_source
+              : undefined,
           low_confidence: Boolean(obj.low_confidence),
           category_coverage:
             obj.category_coverage && typeof obj.category_coverage === "object"
-              ? obj.category_coverage as Record<string, number>
+              ? (obj.category_coverage as Record<string, number>)
               : bm25?.category_coverage,
-          discipline_evidence: Array.isArray(obj.discipline_evidence) ? obj.discipline_evidence : bm25?.discipline_evidence,
-          profile_version: typeof obj.profile_version === "string" ? obj.profile_version : bm25?.profile_version,
-          scoring_discipline: typeof obj.scoring_discipline === "string" ? obj.scoring_discipline : undefined,
+          discipline_evidence: Array.isArray(obj.discipline_evidence)
+            ? obj.discipline_evidence
+            : bm25?.discipline_evidence,
+          profile_version:
+            typeof obj.profile_version === "string"
+              ? obj.profile_version
+              : bm25?.profile_version,
+          scoring_discipline:
+            typeof obj.scoring_discipline === "string"
+              ? obj.scoring_discipline
+              : undefined,
         };
       })();
       if (parsed) setAtsReport(parsed);
@@ -338,25 +394,33 @@ export default function ResultPage() {
     }
   }, [runId, router]);
 
-  const fetchCoverLetter = useCallback(async () => {
-    setCoverLetterLoading(true);
+  const fetchCoverLetterPdf = useCallback(async () => {
+    setCoverLetterPdfLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/v1/runs/${runId}/artifacts/cover-letter`, {
-        credentials: "include",
-      });
+      const res = await fetch(
+        `${API_BASE_URL}/v1/runs/${runId}/artifacts/cover-letter-pdf`,
+        {
+          credentials: "include",
+        },
+      );
       if (res.status === 401) {
         router.push("/login");
         return;
       }
-      if (!res.ok) return;
-      const data = await res.json();
-      if (typeof data.coverLetter === "string" && data.coverLetter.trim() !== "") {
-        setCoverLetter(data.coverLetter);
+      if (res.status === 404) {
+        // PDF not generated yet — retry after a moment
+        setTimeout(fetchCoverLetterPdf, 3000);
+        return;
       }
+      if (!res.ok) return;
+      const buffer = await res.arrayBuffer();
+      const blob = new Blob([buffer], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      setCoverLetterPdfUrl(url);
     } catch {
       // non-blocking
     } finally {
-      setCoverLetterLoading(false);
+      setCoverLetterPdfLoading(false);
     }
   }, [runId, router]);
 
@@ -406,9 +470,12 @@ export default function ResultPage() {
 
       try {
         // 1. Check for LaTeX artifact (final deliverable)
-        const res = await fetch(`${API_BASE_URL}/v1/runs/${runId}/artifacts/resume-latex`, {
-          credentials: "include",
-        });
+        const res = await fetch(
+          `${API_BASE_URL}/v1/runs/${runId}/artifacts/resume-latex`,
+          {
+            credentials: "include",
+          },
+        );
 
         if (res.status === 401) {
           router.push("/login");
@@ -447,13 +514,19 @@ export default function ResultPage() {
               // Pipeline: BM25 → Resume Spec/LaTeX → Report
               // Check if report exists (last step — means resume is done too)
               try {
-                const reportRes = await fetch(`${API_BASE_URL}/v1/runs/${runId}/report`, {
-                  credentials: "include",
-                });
+                const reportRes = await fetch(
+                  `${API_BASE_URL}/v1/runs/${runId}/report`,
+                  {
+                    credentials: "include",
+                  },
+                );
                 if (reportRes.ok) {
                   updateProgress(85, "Finalizing report\u2026");
                 } else {
-                  updateProgress(40, "Analyzing keywords & generating tailored resume\u2026");
+                  updateProgress(
+                    40,
+                    "Analyzing keywords & generating tailored resume\u2026",
+                  );
                 }
               } catch {
                 updateProgress(25, "Processing\u2026");
@@ -475,7 +548,9 @@ export default function ResultPage() {
       } catch (err) {
         pollErrorCountRef.current++;
         if (pollErrorCountRef.current >= 5) {
-          setError(err instanceof Error ? err.message : "Failed to fetch artifact");
+          setError(
+            err instanceof Error ? err.message : "Failed to fetch artifact",
+          );
           return;
         }
         scheduleNextPoll();
@@ -502,8 +577,8 @@ export default function ResultPage() {
     if (!latex) return;
     fetchPDF();
     fetchReport();
-    fetchCoverLetter();
-  }, [latex, fetchPDF, fetchReport, fetchCoverLetter]);
+    fetchCoverLetterPdf();
+  }, [latex, fetchPDF, fetchReport, fetchCoverLetterPdf]);
 
   /* ── Poll for ATS report until available (report is generated after LaTeX) ── */
   useEffect(() => {
@@ -543,43 +618,46 @@ export default function ResultPage() {
     };
   }, [latex, atsReport, runId, router, fetchReport]);
 
-  /* ── Poll for cover letter until available (generated after LaTeX) ── */
+  /* ── Poll for cover letter PDF until available (generated after LaTeX) ── */
   useEffect(() => {
-    if (!latex || coverLetter) return;
+    if (!latex || coverLetterPdfUrl) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     let attempts = 0;
     const maxAttempts = 30; // ~60s total
 
-    const pollCoverLetter = async () => {
+    const pollCoverLetterPdf = async () => {
       if (cancelled || attempts >= maxAttempts) return;
       attempts++;
       try {
-        const res = await fetch(`${API_BASE_URL}/v1/runs/${runId}/artifacts/cover-letter`, {
-          credentials: "include",
-        });
+        const res = await fetch(
+          `${API_BASE_URL}/v1/runs/${runId}/artifacts/cover-letter-pdf`,
+          {
+            credentials: "include",
+          },
+        );
         if (res.status === 401) {
           router.push("/login");
           return;
         }
         if (res.ok) {
-          await fetchCoverLetter();
+          await fetchCoverLetterPdf();
           return;
         }
       } catch {
         // ignore, retry
       }
       if (!cancelled) {
-        timer = setTimeout(pollCoverLetter, 2000);
+        timer = setTimeout(pollCoverLetterPdf, 2000);
       }
     };
 
-    timer = setTimeout(pollCoverLetter, 2000);
+    timer = setTimeout(pollCoverLetterPdf, 2000);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [latex, coverLetter, runId, router, fetchCoverLetter]);
+  }, [latex, coverLetterPdfUrl, runId, router, fetchCoverLetterPdf]);
 
   /* ── Actions ────────────────────────────────────────────────── */
   const handleCopy = async () => {
@@ -601,10 +679,16 @@ export default function ResultPage() {
     // Fallback: fetch fresh
     setPdfLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/v1/runs/${runId}/artifacts/resume-pdf`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(res.status === 404 ? "PDF not ready yet." : "Failed to fetch PDF");
+      const res = await fetch(
+        `${API_BASE_URL}/v1/runs/${runId}/artifacts/resume-pdf`,
+        {
+          credentials: "include",
+        },
+      );
+      if (!res.ok)
+        throw new Error(
+          res.status === 404 ? "PDF not ready yet." : "Failed to fetch PDF",
+        );
       const buffer = await res.arrayBuffer();
       const blob = new Blob([buffer], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
@@ -627,17 +711,23 @@ export default function ResultPage() {
 
   const handleDownloadDOCX = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/v1/runs/${runId}/artifacts/resume-docx`, {
-        credentials: "include",
-      });
+      const res = await fetch(
+        `${API_BASE_URL}/v1/runs/${runId}/artifacts/resume-docx`,
+        {
+          credentials: "include",
+        },
+      );
       if (res.status === 401) {
         router.push("/login");
         return;
       }
-      if (!res.ok) throw new Error(res.status === 404 ? "DOCX not ready yet." : "Failed to fetch DOCX");
+      if (!res.ok)
+        throw new Error(
+          res.status === 404 ? "DOCX not ready yet." : "Failed to fetch DOCX",
+        );
       const buffer = await res.arrayBuffer();
       const blob = new Blob([buffer], {
-        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -649,17 +739,31 @@ export default function ResultPage() {
       URL.revokeObjectURL(url);
       toast("DOCX downloaded");
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to download DOCX", "error");
+      toast(
+        err instanceof Error ? err.message : "Failed to download DOCX",
+        "error",
+      );
     }
   };
 
   const handleDownloadCoverLetterPDF = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/v1/runs/${runId}/artifacts/cover-letter-pdf`, {
-        credentials: "include",
-      });
-      if (res.status === 401) { router.push("/login"); return; }
-      if (!res.ok) throw new Error(res.status === 404 ? "Cover letter PDF not ready yet." : "Failed to fetch cover letter PDF");
+      const res = await fetch(
+        `${API_BASE_URL}/v1/runs/${runId}/artifacts/cover-letter-pdf`,
+        {
+          credentials: "include",
+        },
+      );
+      if (res.status === 401) {
+        router.push("/login");
+        return;
+      }
+      if (!res.ok)
+        throw new Error(
+          res.status === 404
+            ? "Cover letter PDF not ready yet."
+            : "Failed to fetch cover letter PDF",
+        );
       const buffer = await res.arrayBuffer();
       const blob = new Blob([buffer], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
@@ -672,19 +776,37 @@ export default function ResultPage() {
       URL.revokeObjectURL(url);
       toast("Cover letter PDF downloaded");
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to download cover letter PDF", "error");
+      toast(
+        err instanceof Error
+          ? err.message
+          : "Failed to download cover letter PDF",
+        "error",
+      );
     }
   };
 
   const handleDownloadCoverLetterDOCX = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/v1/runs/${runId}/artifacts/cover-letter-docx`, {
-        credentials: "include",
-      });
-      if (res.status === 401) { router.push("/login"); return; }
-      if (!res.ok) throw new Error(res.status === 404 ? "Cover letter DOCX not ready yet." : "Failed to fetch cover letter DOCX");
+      const res = await fetch(
+        `${API_BASE_URL}/v1/runs/${runId}/artifacts/cover-letter-docx`,
+        {
+          credentials: "include",
+        },
+      );
+      if (res.status === 401) {
+        router.push("/login");
+        return;
+      }
+      if (!res.ok)
+        throw new Error(
+          res.status === 404
+            ? "Cover letter DOCX not ready yet."
+            : "Failed to fetch cover letter DOCX",
+        );
       const buffer = await res.arrayBuffer();
-      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -695,27 +817,29 @@ export default function ResultPage() {
       URL.revokeObjectURL(url);
       toast("Cover letter DOCX downloaded");
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to download cover letter DOCX", "error");
+      toast(
+        err instanceof Error
+          ? err.message
+          : "Failed to download cover letter DOCX",
+        "error",
+      );
     }
-  };
-
-  const handleCopyCoverLetter = async () => {
-    if (!coverLetter) return;
-    await navigator.clipboard.writeText(coverLetter);
-    toast("Cover letter copied to clipboard");
   };
 
   const handleGoToResume = () => router.push("/resume");
   const handleGoToJob = () => {
-    if (resumeId) { router.push(`/job?resumeId=${resumeId}`); return; }
+    if (resumeId) {
+      router.push(`/job?resumeId=${resumeId}`);
+      return;
+    }
     router.push("/job");
   };
 
   /* ── Tabs ───────────────────────────────────────────────────── */
   const tabs: { id: Tab; label: string }[] = [
-    { id: "preview", label: "PDF Preview" },
+    { id: "preview", label: "Resume Preview" },
     { id: "report", label: "ATS Report" },
-    { id: "cover", label: "Cover Letter" },
+    { id: "cover", label: "Cover Letter Preview" },
     { id: "latex", label: "LaTeX Source" },
   ];
 
@@ -724,15 +848,16 @@ export default function ResultPage() {
       <TopBar showLogout />
       <main className="mx-auto flex w-full max-w-5xl flex-1 items-start justify-center px-4 py-8 sm:px-6 sm:py-16">
         <div className="w-full max-w-3xl rounded-[28px] border border-white/10 bg-ink-900/70 p-5 shadow-panel backdrop-blur sm:p-8">
-
           {/* Header */}
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-xl font-semibold text-white sm:text-2xl">Your tailored resume</h1>
+            <h1 className="text-xl font-semibold text-white sm:text-2xl">
+              Your tailored resume
+            </h1>
             <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={handleGoToResume}
                 className="rounded-full border border-white/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-200 transition hover:border-ember-400/60 hover:text-ember-200 sm:px-4 sm:py-1.5 sm:tracking-[0.2em]"
-                aria-label="Upload a new CV"
+                aria-label="Upload a new resume"
               >
                 New CV
               </button>
@@ -750,7 +875,13 @@ export default function ResultPage() {
           {/* Loading state */}
           {!latex ? (
             <div className="mt-6">
-              <div className="h-2 w-full overflow-hidden rounded-full bg-ink-950" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
+              <div
+                className="h-2 w-full overflow-hidden rounded-full bg-ink-950"
+                role="progressbar"
+                aria-valuenow={progress}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
                 <div
                   className="h-full rounded-full bg-ember-500 transition-all"
                   style={{ width: `${progress}%` }}
@@ -776,7 +907,11 @@ export default function ResultPage() {
           ) : (
             <>
               {/* Tab navigation */}
-              <div className="mt-6 flex gap-1 rounded-xl border border-white/10 bg-ink-950/60 p-1" role="tablist" aria-label="Result tabs">
+              <div
+                className="mt-6 flex gap-1 rounded-xl border border-white/10 bg-ink-950/60 p-1"
+                role="tablist"
+                aria-label="Result tabs"
+              >
                 {tabs.map((tab) => (
                   <button
                     key={tab.id}
@@ -822,7 +957,9 @@ export default function ResultPage() {
                       Copy LaTeX
                     </button>
                   </div>
-                  {pdfError && <p className="mt-2 text-xs text-rose-300">{pdfError}</p>}
+                  {pdfError && (
+                    <p className="mt-2 text-xs text-rose-300">{pdfError}</p>
+                  )}
                 </>
               )}
 
@@ -861,75 +998,114 @@ export default function ResultPage() {
                     <div className="flex flex-col items-center gap-3 sm:flex-row sm:gap-6">
                       <ScoreRing score={atsReport.score} />
                       <div>
-                        <h3 className="text-lg font-semibold text-white">ATS Compatibility Score</h3>
+                        <h3 className="text-lg font-semibold text-white">
+                          ATS Compatibility Score
+                        </h3>
                         <p className="mt-1 text-sm text-slate-400">
-                          Based on BM25 keyword analysis and resume-to-job alignment.
+                          Based on BM25 keyword analysis and resume-to-job
+                          alignment.
                         </p>
                       </div>
                     </div>
 
                     {(atsReport.discipline || atsReport.profile_version) && (
                       <div className="rounded-xl border border-white/10 bg-ink-900/50 p-4">
-                        <h4 className="text-sm font-semibold text-slate-200">Discipline context</h4>
+                        <h4 className="text-sm font-semibold text-slate-200">
+                          Discipline context
+                        </h4>
                         {atsReport.discipline ? (
                           <p className="mt-2 text-sm text-slate-200">
-                            {disciplineLabels[atsReport.discipline] || atsReport.discipline}
+                            {disciplineLabels[atsReport.discipline] ||
+                              atsReport.discipline}
                           </p>
                         ) : null}
                         <p className="mt-1 text-xs text-slate-400">
-                          Confidence: {Math.round(((atsReport.discipline_confidence ?? 0) * 100))}% • Source: {atsReport.discipline_source || "auto"}
+                          Confidence:{" "}
+                          {Math.round(
+                            (atsReport.discipline_confidence ?? 0) * 100,
+                          )}
+                          % • Source: {atsReport.discipline_source || "auto"}
                           {atsReport.low_confidence ? " • low confidence" : ""}
-                          {atsReport.scoring_discipline && atsReport.scoring_discipline !== atsReport.discipline ? ` • scoring profile: ${disciplineLabels[atsReport.scoring_discipline] || atsReport.scoring_discipline}` : ""}
+                          {atsReport.scoring_discipline &&
+                          atsReport.scoring_discipline !== atsReport.discipline
+                            ? ` • scoring profile: ${disciplineLabels[atsReport.scoring_discipline] || atsReport.scoring_discipline}`
+                            : ""}
                         </p>
                         {atsReport.profile_version ? (
-                          <p className="mt-1 text-[11px] text-slate-500">Profile version: {atsReport.profile_version}</p>
+                          <p className="mt-1 text-[11px] text-slate-500">
+                            Profile version: {atsReport.profile_version}
+                          </p>
                         ) : null}
-                        {Array.isArray(atsReport.discipline_evidence) && atsReport.discipline_evidence.length > 0 ? (
+                        {Array.isArray(atsReport.discipline_evidence) &&
+                        atsReport.discipline_evidence.length > 0 ? (
                           <div className="mt-3">
-                            <p className="text-xs font-medium text-slate-300">Classification evidence</p>
+                            <p className="text-xs font-medium text-slate-300">
+                              Classification evidence
+                            </p>
                             <div className="mt-1.5 flex flex-wrap gap-1.5">
-                              {atsReport.discipline_evidence.slice(0, 8).map((item) => (
-                                <span
-                                  key={`discipline-evidence-${item.term}`}
-                                  className="rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1 text-xs text-cyan-200"
-                                >
-                                  {item.term}
-                                </span>
-                              ))}
+                              {atsReport.discipline_evidence
+                                .slice(0, 8)
+                                .map((item) => (
+                                  <span
+                                    key={`discipline-evidence-${item.term}`}
+                                    className="rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1 text-xs text-cyan-200"
+                                  >
+                                    {item.term}
+                                  </span>
+                                ))}
                             </div>
                           </div>
                         ) : null}
                       </div>
                     )}
 
-                    {atsReport.category_coverage && Object.keys(atsReport.category_coverage).length > 0 && (
-                      <div className="rounded-xl border border-white/10 bg-ink-900/50 p-4">
-                        <h4 className="text-sm font-semibold text-slate-200">Bucket coverage by discipline</h4>
-                        <div className="mt-3 space-y-2">
-                          {Object.entries(atsReport.category_coverage)
-                            .sort(([a], [b]) => a.localeCompare(b))
-                            .map(([bucket, value]) => (
-                              <div key={`coverage-${bucket}`} className="space-y-1">
-                                <div className="flex items-center justify-between gap-2 text-xs text-slate-300">
-                                  <span>{bucketOrder.find((item) => item.key === bucket)?.label || bucket}</span>
-                                  <span>{Math.round(Math.max(0, Math.min(1, value)) * 100)}%</span>
+                    {atsReport.category_coverage &&
+                      Object.keys(atsReport.category_coverage).length > 0 && (
+                        <div className="rounded-xl border border-white/10 bg-ink-900/50 p-4">
+                          <h4 className="text-sm font-semibold text-slate-200">
+                            Bucket coverage by discipline
+                          </h4>
+                          <div className="mt-3 space-y-2">
+                            {Object.entries(atsReport.category_coverage)
+                              .sort(([a], [b]) => a.localeCompare(b))
+                              .map(([bucket, value]) => (
+                                <div
+                                  key={`coverage-${bucket}`}
+                                  className="space-y-1"
+                                >
+                                  <div className="flex items-center justify-between gap-2 text-xs text-slate-300">
+                                    <span>
+                                      {bucketOrder.find(
+                                        (item) => item.key === bucket,
+                                      )?.label || bucket}
+                                    </span>
+                                    <span>
+                                      {Math.round(
+                                        Math.max(0, Math.min(1, value)) * 100,
+                                      )}
+                                      %
+                                    </span>
+                                  </div>
+                                  <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
+                                    <div
+                                      className="h-full rounded-full bg-emerald-500/60"
+                                      style={{
+                                        width: `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`,
+                                      }}
+                                    />
+                                  </div>
                                 </div>
-                                <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
-                                  <div
-                                    className="h-full rounded-full bg-emerald-500/60"
-                                    style={{ width: `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%` }}
-                                  />
-                                </div>
-                              </div>
-                            ))}
+                              ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
                     {/* Change Summary */}
                     {atsReport.summary && (
                       <div className="rounded-xl border border-white/10 bg-ink-900/50 p-4">
-                        <h4 className="text-sm font-semibold text-slate-200">What changed</h4>
+                        <h4 className="text-sm font-semibold text-slate-200">
+                          What changed
+                        </h4>
                         <p className="mt-2 text-sm leading-relaxed text-slate-300">
                           {atsReport.summary}
                         </p>
@@ -939,10 +1115,15 @@ export default function ResultPage() {
                     {/* Notes */}
                     {atsReport.notes.length > 0 && (
                       <div>
-                        <h4 className="text-sm font-semibold text-slate-200">Analysis Notes</h4>
+                        <h4 className="text-sm font-semibold text-slate-200">
+                          Analysis Notes
+                        </h4>
                         <ul className="mt-2 space-y-2">
                           {atsReport.notes.map((note, i) => (
-                            <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                            <li
+                              key={i}
+                              className="flex items-start gap-2 text-sm text-slate-300"
+                            >
                               <span className="mt-1.5 inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full bg-ember-400" />
                               {note}
                             </li>
@@ -954,11 +1135,18 @@ export default function ResultPage() {
                     {/* Change plan */}
                     {atsReport.change_plan.length > 0 && (
                       <div>
-                        <h4 className="text-sm font-semibold text-slate-200">Change Plan</h4>
+                        <h4 className="text-sm font-semibold text-slate-200">
+                          Change Plan
+                        </h4>
                         <ul className="mt-2 space-y-2">
                           {atsReport.change_plan.map((change, i) => (
-                            <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
-                              <span className="mt-1 flex-shrink-0 text-ember-400">&#10003;</span>
+                            <li
+                              key={i}
+                              className="flex items-start gap-2 text-sm text-slate-300"
+                            >
+                              <span className="mt-1 flex-shrink-0 text-ember-400">
+                                &#10003;
+                              </span>
                               {change}
                             </li>
                           ))}
@@ -969,45 +1157,55 @@ export default function ResultPage() {
                     {/* BM25 Keyword Signals */}
                     {atsReport.bm25_signals && (
                       <div>
-                        <h4 className="text-sm font-semibold text-slate-200">Keyword Signals (BM25)</h4>
+                        <h4 className="text-sm font-semibold text-slate-200">
+                          Keyword Signals (BM25)
+                        </h4>
                         <p className="mt-1 text-xs text-slate-400">
-                          How well your resume keywords match the job description.
+                          How well your resume keywords match the job
+                          description.
                         </p>
 
                         {/* Overlap terms */}
                         {atsReport.bm25_signals.overlap_terms.length > 0 && (
                           <div className="mt-3">
                             <p className="text-xs font-medium text-emerald-300">
-                              Matched keywords ({atsReport.bm25_signals.overlap_terms.length})
+                              Matched keywords (
+                              {atsReport.bm25_signals.overlap_terms.length})
                             </p>
                             <div className="mt-1.5 flex flex-wrap gap-1.5">
-                              {atsReport.bm25_signals.overlap_terms.map((term) => (
-                                <span
-                                  key={term}
-                                  className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs text-emerald-300 border border-emerald-500/20"
-                                >
-                                  {term}
-                                </span>
-                              ))}
+                              {atsReport.bm25_signals.overlap_terms.map(
+                                (term) => (
+                                  <span
+                                    key={term}
+                                    className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs text-emerald-300 border border-emerald-500/20"
+                                  >
+                                    {term}
+                                  </span>
+                                ),
+                              )}
                             </div>
                           </div>
                         )}
 
                         {/* Missing terms */}
-                        {atsReport.bm25_signals.missing_job_terms.length > 0 && (
+                        {atsReport.bm25_signals.missing_job_terms.length >
+                          0 && (
                           <div className="mt-3">
                             <p className="text-xs font-medium text-rose-300">
-                              Missing from resume ({atsReport.bm25_signals.missing_job_terms.length})
+                              Missing from resume (
+                              {atsReport.bm25_signals.missing_job_terms.length})
                             </p>
                             <div className="mt-1.5 flex flex-wrap gap-1.5">
-                              {atsReport.bm25_signals.missing_job_terms.slice(0, 15).map((ts) => (
-                                <span
-                                  key={ts.term}
-                                  className="rounded-full bg-rose-500/15 px-2.5 py-1 text-xs text-rose-300 border border-rose-500/20"
-                                >
-                                  {ts.term}
-                                </span>
-                              ))}
+                              {atsReport.bm25_signals.missing_job_terms
+                                .slice(0, 15)
+                                .map((ts) => (
+                                  <span
+                                    key={ts.term}
+                                    className="rounded-full bg-rose-500/15 px-2.5 py-1 text-xs text-rose-300 border border-rose-500/20"
+                                  >
+                                    {ts.term}
+                                  </span>
+                                ))}
                             </div>
                           </div>
                         )}
@@ -1015,34 +1213,53 @@ export default function ResultPage() {
                         {/* Top job terms with scores */}
                         {atsReport.bm25_signals.top_job_terms.length > 0 && (
                           <div className="mt-3">
-                            <p className="text-xs font-medium text-slate-300">Top job terms by importance</p>
+                            <p className="text-xs font-medium text-slate-300">
+                              Top job terms by importance
+                            </p>
                             <div className="mt-1.5 space-y-1">
-                              {atsReport.bm25_signals.top_job_terms.map((ts) => {
-                                const isMatched = atsReport.bm25_signals!.overlap_terms.includes(ts.term);
-                                return (
-                                  <div key={ts.term} className="flex items-center gap-2">
-                                    <span className={`text-xs w-24 truncate ${isMatched ? "text-emerald-300" : "text-slate-400"}`}>
-                                      {ts.term}
-                                    </span>
-                                    <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
-                                      <div
-                                        className={`h-full rounded-full transition-all ${isMatched ? "bg-emerald-500/60" : "bg-slate-500/40"}`}
-                                        style={{ width: `${Math.min(100, (ts.score / (atsReport.bm25_signals!.top_job_terms[0]?.score || 1)) * 100)}%` }}
-                                      />
+                              {atsReport.bm25_signals.top_job_terms.map(
+                                (ts) => {
+                                  const isMatched =
+                                    atsReport.bm25_signals!.overlap_terms.includes(
+                                      ts.term,
+                                    );
+                                  return (
+                                    <div
+                                      key={ts.term}
+                                      className="flex items-center gap-2"
+                                    >
+                                      <span
+                                        className={`text-xs w-24 truncate ${isMatched ? "text-emerald-300" : "text-slate-400"}`}
+                                      >
+                                        {ts.term}
+                                      </span>
+                                      <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
+                                        <div
+                                          className={`h-full rounded-full transition-all ${isMatched ? "bg-emerald-500/60" : "bg-slate-500/40"}`}
+                                          style={{
+                                            width: `${Math.min(100, (ts.score / (atsReport.bm25_signals!.top_job_terms[0]?.score || 1)) * 100)}%`,
+                                          }}
+                                        />
+                                      </div>
                                     </div>
-                                  </div>
-                                );
-                              })}
+                                  );
+                                },
+                              )}
                             </div>
                           </div>
                         )}
 
                         {atsReport.bm25_signals.bucketed_top_terms && (
                           <div className="mt-4">
-                            <p className="text-xs font-medium text-slate-300">Deterministic skill buckets</p>
+                            <p className="text-xs font-medium text-slate-300">
+                              Deterministic skill buckets
+                            </p>
                             <div className="mt-2 space-y-2">
                               {bucketOrder.map((bucket) => {
-                                const items = atsReport.bm25_signals?.bucketed_top_terms?.[bucket.key] || [];
+                                const items =
+                                  atsReport.bm25_signals?.bucketed_top_terms?.[
+                                    bucket.key
+                                  ] || [];
                                 if (items.length === 0) return null;
                                 return (
                                   <div key={bucket.key}>
@@ -1051,7 +1268,10 @@ export default function ResultPage() {
                                     </p>
                                     <div className="mt-1 flex flex-wrap gap-1.5">
                                       {items.slice(0, 10).map((item) => {
-                                        const matched = atsReport.bm25_signals?.overlap_terms.includes(item.term);
+                                        const matched =
+                                          atsReport.bm25_signals?.overlap_terms.includes(
+                                            item.term,
+                                          );
                                         return (
                                           <span
                                             key={`${bucket.key}:${item.term}`}
@@ -1073,16 +1293,19 @@ export default function ResultPage() {
                           </div>
                         )}
 
-                        {Array.isArray(atsReport.bm25_signals.low_signal_terms) &&
-                          atsReport.bm25_signals.low_signal_terms.length > 0 && (
+                        {Array.isArray(
+                          atsReport.bm25_signals.low_signal_terms,
+                        ) &&
+                          atsReport.bm25_signals.low_signal_terms.length >
+                            0 && (
                             <p className="mt-3 text-[11px] text-slate-500">
-                              {atsReport.bm25_signals.low_signal_terms.length} low-signal terms were filtered out
-                              from missing/top term lists.
+                              {atsReport.bm25_signals.low_signal_terms.length}{" "}
+                              low-signal terms were filtered out from
+                              missing/top term lists.
                             </p>
                           )}
                       </div>
                     )}
-
                   </div>
                 )}
               </div>
@@ -1094,14 +1317,14 @@ export default function ResultPage() {
                 aria-labelledby="tab-cover"
                 className={activeTab === "cover" ? "mt-4" : "hidden"}
               >
-                {coverLetterLoading ? (
-                  <div className="space-y-4 rounded-2xl border border-white/10 bg-ink-950/60 p-6">
-                    <SkeletonBlock />
-                  </div>
-                ) : coverLetter ? (
+                {coverLetterPdfLoading || !coverLetterPdfUrl ? (
+                  <PDFSkeleton />
+                ) : (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Generated cover letter</p>
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                        Generated cover letter
+                      </p>
                       <div className="flex items-center gap-2">
                         <button
                           onClick={handleDownloadCoverLetterPDF}
@@ -1117,21 +1340,13 @@ export default function ResultPage() {
                         >
                           Download Word
                         </button>
-                        <button
-                          onClick={handleCopyCoverLetter}
-                          className="rounded-full border border-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-slate-200 transition hover:border-ember-400 hover:text-ember-200"
-                        >
-                          Copy text
-                        </button>
                       </div>
                     </div>
-                    <pre className="max-h-[520px] overflow-auto whitespace-pre-wrap rounded-2xl border border-white/10 bg-ink-950 p-4 text-sm leading-6 text-slate-200">
-                      {coverLetter}
-                    </pre>
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-white/10 bg-ink-950/60 p-6">
-                    <p className="text-sm text-slate-400">Cover letter is still being generated. Refresh in a moment.</p>
+                    <iframe
+                      src={coverLetterPdfUrl}
+                      title="Cover letter preview"
+                      className="h-[600px] w-full rounded-2xl border border-white/10 bg-white sm:h-[750px]"
+                    />
                   </div>
                 )}
               </div>
@@ -1147,7 +1362,6 @@ export default function ResultPage() {
                   {latex}
                 </pre>
               </div>
-
             </>
           )}
         </div>
