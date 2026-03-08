@@ -45,14 +45,19 @@ RETURNING id`
 }
 
 // CreateOAuthUser creates a user with an OAuth provider and sub.
-func (r *Repo) CreateOAuthUser(ctx context.Context, email, passwordHash, displayName, provider, sub string) (uuid.UUID, error) {
+func (r *Repo) CreateOAuthUser(ctx context.Context, email, passwordHash, displayName, provider, sub, avatarURL string) (uuid.UUID, error) {
 	const q = `
-INSERT INTO users (email, password_hash, display_name, auth_provider, oauth_provider, oauth_sub)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO users (email, password_hash, display_name, auth_provider, oauth_provider, oauth_sub, avatar_url)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id`
 
+	var avatarArg any
+	if avatarURL != "" {
+		avatarArg = avatarURL
+	}
+
 	var id uuid.UUID
-	err := r.db.QueryRow(ctx, q, email, passwordHash, displayName, provider, provider, sub).Scan(&id)
+	err := r.db.QueryRow(ctx, q, email, passwordHash, displayName, provider, provider, sub, avatarArg).Scan(&id)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -67,7 +72,7 @@ RETURNING id`
 // GetUserByEmail fetches a user by email.
 func (r *Repo) GetUserByEmail(ctx context.Context, email string) (User, error) {
 	const q = `
-	SELECT id, email, password_hash, display_name, auth_provider, oauth_provider, oauth_sub, created_at, updated_at
+	SELECT id, email, password_hash, display_name, auth_provider, oauth_provider, oauth_sub, avatar_url, encrypted_openai_key, created_at, updated_at
 	FROM users
 	WHERE email = $1`
 
@@ -80,6 +85,8 @@ func (r *Repo) GetUserByEmail(ctx context.Context, email string) (User, error) {
 		&u.AuthProvider,
 		&u.OAuthProvider,
 		&u.OAuthSub,
+		&u.AvatarURL,
+		&u.EncryptedOpenAIKey,
 		&u.CreatedAt,
 		&u.UpdatedAt,
 	)
@@ -96,7 +103,7 @@ func (r *Repo) GetUserByEmail(ctx context.Context, email string) (User, error) {
 // GetUserByOAuth fetches a user by oauth provider+sub.
 func (r *Repo) GetUserByOAuth(ctx context.Context, provider, sub string) (User, error) {
 	const q = `
-	SELECT id, email, password_hash, display_name, auth_provider, oauth_provider, oauth_sub, created_at, updated_at
+	SELECT id, email, password_hash, display_name, auth_provider, oauth_provider, oauth_sub, avatar_url, encrypted_openai_key, created_at, updated_at
 	FROM users
 	WHERE oauth_provider = $1 AND oauth_sub = $2`
 
@@ -109,6 +116,8 @@ func (r *Repo) GetUserByOAuth(ctx context.Context, provider, sub string) (User, 
 		&u.AuthProvider,
 		&u.OAuthProvider,
 		&u.OAuthSub,
+		&u.AvatarURL,
+		&u.EncryptedOpenAIKey,
 		&u.CreatedAt,
 		&u.UpdatedAt,
 	)
@@ -120,6 +129,79 @@ func (r *Repo) GetUserByOAuth(ctx context.Context, provider, sub string) (User, 
 	}
 
 	return u, nil
+}
+
+// GetUserByID fetches a user by their primary key.
+func (r *Repo) GetUserByID(ctx context.Context, userID uuid.UUID) (User, error) {
+	const q = `
+	SELECT id, email, password_hash, display_name, auth_provider, oauth_provider, oauth_sub, avatar_url, encrypted_openai_key, created_at, updated_at
+	FROM users
+	WHERE id = $1`
+
+	var u User
+	err := r.db.QueryRow(ctx, q, userID).Scan(
+		&u.ID,
+		&u.Email,
+		&u.PasswordHash,
+		&u.DisplayName,
+		&u.AuthProvider,
+		&u.OAuthProvider,
+		&u.OAuthSub,
+		&u.AvatarURL,
+		&u.EncryptedOpenAIKey,
+		&u.CreatedAt,
+		&u.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return User{}, ErrUserNotFound
+		}
+		return User{}, err
+	}
+
+	return u, nil
+}
+
+// UpdatePasswordHash sets a new bcrypt hash for the user.
+func (r *Repo) UpdatePasswordHash(ctx context.Context, userID uuid.UUID, hash string) error {
+	const q = `UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1`
+	_, err := r.db.Exec(ctx, q, userID, hash)
+	return err
+}
+
+// UpdateAvatarURL sets or clears the avatar_url for a user.
+func (r *Repo) UpdateAvatarURL(ctx context.Context, userID uuid.UUID, avatarURL *string) error {
+	const q = `UPDATE users SET avatar_url = $2, updated_at = now() WHERE id = $1`
+	_, err := r.db.Exec(ctx, q, userID, avatarURL)
+	return err
+}
+
+// SetEncryptedAPIKey stores or clears the encrypted_openai_key for a user.
+func (r *Repo) SetEncryptedAPIKey(ctx context.Context, userID uuid.UUID, encrypted *string) error {
+	const q = `UPDATE users SET encrypted_openai_key = $2, updated_at = now() WHERE id = $1`
+	_, err := r.db.Exec(ctx, q, userID, encrypted)
+	return err
+}
+
+// GetEncryptedOpenAIKey returns the encrypted_openai_key for a user (implements jobs.UserKeyRepo).
+func (r *Repo) GetEncryptedOpenAIKey(ctx context.Context, userID uuid.UUID) (*string, error) {
+	const q = `SELECT encrypted_openai_key FROM users WHERE id = $1`
+	var key *string
+	err := r.db.QueryRow(ctx, q, userID).Scan(&key)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+	return key, nil
+}
+
+// DeleteUser deletes the user row; sessions and runs cascade via FK.
+func (r *Repo) DeleteUser(ctx context.Context, userID uuid.UUID) error {
+	const q = `DELETE FROM users WHERE id = $1`
+	_, err := r.db.Exec(ctx, q, userID)
+	return err
 }
 
 // LinkOAuth sets oauth provider/sub for an existing user if not already set.
