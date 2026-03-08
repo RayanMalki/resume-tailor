@@ -653,6 +653,52 @@ export default function ResultPage() {
     }
   };
 
+  const handleDownloadCoverLetterPDF = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/v1/runs/${runId}/artifacts/cover-letter-pdf`, {
+        credentials: "include",
+      });
+      if (res.status === 401) { router.push("/login"); return; }
+      if (!res.ok) throw new Error(res.status === 404 ? "Cover letter PDF not ready yet." : "Failed to fetch cover letter PDF");
+      const buffer = await res.arrayBuffer();
+      const blob = new Blob([buffer], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "cover_letter.pdf";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast("Cover letter PDF downloaded");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to download cover letter PDF", "error");
+    }
+  };
+
+  const handleDownloadCoverLetterDOCX = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/v1/runs/${runId}/artifacts/cover-letter-docx`, {
+        credentials: "include",
+      });
+      if (res.status === 401) { router.push("/login"); return; }
+      if (!res.ok) throw new Error(res.status === 404 ? "Cover letter DOCX not ready yet." : "Failed to fetch cover letter DOCX");
+      const buffer = await res.arrayBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "cover_letter.docx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast("Cover letter DOCX downloaded");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to download cover letter DOCX", "error");
+    }
+  };
+
   const handleCopyCoverLetter = async () => {
     if (!coverLetter) return;
     await navigator.clipboard.writeText(coverLetter);
@@ -1077,12 +1123,28 @@ export default function ResultPage() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Generated cover letter</p>
-                      <button
-                        onClick={handleCopyCoverLetter}
-                        className="rounded-full border border-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-slate-200 transition hover:border-ember-400 hover:text-ember-200"
-                      >
-                        Copy text
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleDownloadCoverLetterPDF}
+                          className="rounded-full border border-ember-500/60 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-ember-200 transition hover:border-ember-400 hover:text-white"
+                          aria-label="Download cover letter as PDF"
+                        >
+                          Download PDF
+                        </button>
+                        <button
+                          onClick={handleDownloadCoverLetterDOCX}
+                          className="rounded-full border border-emerald-500/60 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-emerald-200 transition hover:border-emerald-400 hover:text-white"
+                          aria-label="Download cover letter as DOCX"
+                        >
+                          Download Word
+                        </button>
+                        <button
+                          onClick={handleCopyCoverLetter}
+                          className="rounded-full border border-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-slate-200 transition hover:border-ember-400 hover:text-ember-200"
+                        >
+                          Copy text
+                        </button>
+                      </div>
                     </div>
                     <pre className="max-h-[520px] overflow-auto whitespace-pre-wrap rounded-2xl border border-white/10 bg-ink-950 p-4 text-sm leading-6 text-slate-200">
                       {coverLetter}
