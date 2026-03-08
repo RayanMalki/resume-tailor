@@ -22,7 +22,7 @@ func NewRepo(db *pgxpool.Pool) *Repo {
 	return &Repo{db: db}
 }
 
-func (r *Repo) CreateRun(ctx context.Context, userID, resumeID uuid.UUID, jobText string, projectControls []ProjectControl, discipline *Discipline, disciplineScore float64, disciplineSource DisciplineSource) (Run, error) {
+func (r *Repo) CreateRun(ctx context.Context, userID, resumeID uuid.UUID, jobText string, projectControls []ProjectControl, discipline *Discipline, disciplineScore float64, disciplineSource DisciplineSource, creatorIP string) (Run, error) {
 	controlsJSON, err := marshalProjectControls(projectControls)
 	if err != nil {
 		return Run{}, err
@@ -37,17 +37,21 @@ func (r *Repo) CreateRun(ctx context.Context, userID, resumeID uuid.UUID, jobTex
 	if strings.TrimSpace(string(disciplineSource)) == "" {
 		disciplineSource = DisciplineSourceAuto
 	}
+	var creatorIPArg any
+	if creatorIP != "" {
+		creatorIPArg = creatorIP
+	}
 
 	const q = `
-INSERT INTO runs (user_id, resume_id, job_text, project_controls, discipline, discipline_confidence, discipline_source, status)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO runs (user_id, resume_id, job_text, project_controls, discipline, discipline_confidence, discipline_source, status, creator_ip)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING id, user_id, resume_id, job_text, project_controls, discipline, discipline_confidence, discipline_source, status, error_message, created_at, updated_at
 `
 
 	var run Run
 	var controlsRaw []byte
 	var dbDiscipline sql.NullString
-	err = r.db.QueryRow(ctx, q, userID, resumeID, jobText, controlsJSON, disciplineRaw, disciplineScore, disciplineSource, StatusQueued).Scan(
+	err = r.db.QueryRow(ctx, q, userID, resumeID, jobText, controlsJSON, disciplineRaw, disciplineScore, disciplineSource, StatusQueued, creatorIPArg).Scan(
 		&run.ID,
 		&run.UserID,
 		&run.ResumeID,
@@ -243,6 +247,22 @@ func (r *Repo) UpdateRunDiscipline(ctx context.Context, runID uuid.UUID, discipl
 		return ErrRunNotFound
 	}
 	return nil
+}
+
+// CountRunsTodayForUser counts runs created today by the given user.
+func (r *Repo) CountRunsTodayForUser(ctx context.Context, userID uuid.UUID) (int, error) {
+	const q = `SELECT COUNT(*) FROM runs WHERE user_id = $1 AND created_at >= CURRENT_DATE`
+	var count int
+	err := r.db.QueryRow(ctx, q, userID).Scan(&count)
+	return count, err
+}
+
+// CountRunsTodayForIP counts runs created today from the given IP address.
+func (r *Repo) CountRunsTodayForIP(ctx context.Context, ip string) (int, error) {
+	const q = `SELECT COUNT(*) FROM runs WHERE creator_ip = $1 AND created_at >= CURRENT_DATE`
+	var count int
+	err := r.db.QueryRow(ctx, q, ip).Scan(&count)
+	return count, err
 }
 
 func marshalProjectControls(controls []ProjectControl) ([]byte, error) {
