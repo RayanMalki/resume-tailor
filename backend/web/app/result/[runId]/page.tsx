@@ -92,7 +92,7 @@ function PDFSkeleton() {
   return (
     <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-white/10 bg-ink-950 p-10">
       <div className="h-10 w-10 animate-spin rounded-full border-2 border-ember-500/30 border-t-ember-500" />
-      <p className="text-sm text-slate-400">Loading PDF preview&hellip;</p>
+      <p className="text-sm text-slate-400">Loading resume preview&hellip;</p>
     </div>
   );
 }
@@ -838,7 +838,7 @@ export default function ResultPage() {
                 ) : (
                   <iframe
                     src={pdfUrl}
-                    title="Resume PDF preview"
+                    title="Resume preview"
                     className="h-[600px] w-full rounded-2xl border border-white/10 bg-white sm:h-[750px]"
                   />
                 )}
@@ -1083,31 +1083,6 @@ export default function ResultPage() {
                       </div>
                     )}
 
-                    {/* Interview questions */}
-                    {atsReport.interview_questions.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-semibold text-slate-200">Likely interview questions</h4>
-                        <p className="mt-1 text-xs text-slate-400">
-                          Suggested STAR talking points based on your resume and this role.
-                        </p>
-                        <div className="mt-3 space-y-4">
-                          {atsReport.interview_questions.slice(0, 5).map((item, idx) => (
-                            <div key={`${item.question}-${idx}`} className="rounded-xl border border-white/10 bg-ink-900/50 p-3">
-                              <p className="text-sm font-medium text-ember-200">{idx + 1}. {item.question}</p>
-                              {item.answer_star.length > 0 && (
-                                <ul className="mt-2 space-y-1">
-                                  {item.answer_star.map((line, i) => (
-                                    <li key={i} className="text-xs text-slate-300">
-                                      • {line}
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
