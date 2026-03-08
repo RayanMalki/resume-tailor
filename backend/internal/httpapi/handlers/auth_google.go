@@ -36,6 +36,7 @@ type googleUserInfo struct {
 	Email         string `json:"email"`
 	EmailVerified bool   `json:"email_verified"`
 	Name          string `json:"name"`
+	Picture       string `json:"picture"`
 }
 
 func GoogleStart(authSvc *auth.Service) http.HandlerFunc {
@@ -125,7 +126,7 @@ func GoogleCallback(authSvc *auth.Service) http.HandlerFunc {
 			return
 		}
 
-		token, expiresAt, userID, err := authSvc.LoginWithOAuth(r.Context(), "google", userInfo.Sub, userInfo.Email, userInfo.Name)
+		token, expiresAt, userID, err := authSvc.LoginWithOAuth(r.Context(), "google", userInfo.Sub, userInfo.Email, userInfo.Name, userInfo.Picture)
 		if err != nil {
 			if errors.Is(err, auth.ErrInvalidCredentials) {
 				writeError(w, http.StatusUnauthorized, "oauth_login_failed")
