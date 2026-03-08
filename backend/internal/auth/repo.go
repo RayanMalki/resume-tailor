@@ -72,7 +72,7 @@ RETURNING id`
 // GetUserByEmail fetches a user by email.
 func (r *Repo) GetUserByEmail(ctx context.Context, email string) (User, error) {
 	const q = `
-	SELECT id, email, password_hash, display_name, auth_provider, oauth_provider, oauth_sub, avatar_url, encrypted_openai_key, created_at, updated_at
+	SELECT id, email, password_hash, display_name, auth_provider, oauth_provider, oauth_sub, avatar_url, encrypted_openai_key, onboarding_seen, created_at, updated_at
 	FROM users
 	WHERE email = $1`
 
@@ -87,6 +87,7 @@ func (r *Repo) GetUserByEmail(ctx context.Context, email string) (User, error) {
 		&u.OAuthSub,
 		&u.AvatarURL,
 		&u.EncryptedOpenAIKey,
+		&u.OnboardingSeen,
 		&u.CreatedAt,
 		&u.UpdatedAt,
 	)
@@ -103,7 +104,7 @@ func (r *Repo) GetUserByEmail(ctx context.Context, email string) (User, error) {
 // GetUserByOAuth fetches a user by oauth provider+sub.
 func (r *Repo) GetUserByOAuth(ctx context.Context, provider, sub string) (User, error) {
 	const q = `
-	SELECT id, email, password_hash, display_name, auth_provider, oauth_provider, oauth_sub, avatar_url, encrypted_openai_key, created_at, updated_at
+	SELECT id, email, password_hash, display_name, auth_provider, oauth_provider, oauth_sub, avatar_url, encrypted_openai_key, onboarding_seen, created_at, updated_at
 	FROM users
 	WHERE oauth_provider = $1 AND oauth_sub = $2`
 
@@ -118,6 +119,7 @@ func (r *Repo) GetUserByOAuth(ctx context.Context, provider, sub string) (User, 
 		&u.OAuthSub,
 		&u.AvatarURL,
 		&u.EncryptedOpenAIKey,
+		&u.OnboardingSeen,
 		&u.CreatedAt,
 		&u.UpdatedAt,
 	)
@@ -134,7 +136,7 @@ func (r *Repo) GetUserByOAuth(ctx context.Context, provider, sub string) (User, 
 // GetUserByID fetches a user by their primary key.
 func (r *Repo) GetUserByID(ctx context.Context, userID uuid.UUID) (User, error) {
 	const q = `
-	SELECT id, email, password_hash, display_name, auth_provider, oauth_provider, oauth_sub, avatar_url, encrypted_openai_key, created_at, updated_at
+	SELECT id, email, password_hash, display_name, auth_provider, oauth_provider, oauth_sub, avatar_url, encrypted_openai_key, onboarding_seen, created_at, updated_at
 	FROM users
 	WHERE id = $1`
 
@@ -149,6 +151,7 @@ func (r *Repo) GetUserByID(ctx context.Context, userID uuid.UUID) (User, error) 
 		&u.OAuthSub,
 		&u.AvatarURL,
 		&u.EncryptedOpenAIKey,
+		&u.OnboardingSeen,
 		&u.CreatedAt,
 		&u.UpdatedAt,
 	)
@@ -173,6 +176,13 @@ func (r *Repo) UpdatePasswordHash(ctx context.Context, userID uuid.UUID, hash st
 func (r *Repo) UpdateAvatarURL(ctx context.Context, userID uuid.UUID, avatarURL *string) error {
 	const q = `UPDATE users SET avatar_url = $2, updated_at = now() WHERE id = $1`
 	_, err := r.db.Exec(ctx, q, userID, avatarURL)
+	return err
+}
+
+// SetOnboardingSeen marks the onboarding_seen flag as true for a user.
+func (r *Repo) SetOnboardingSeen(ctx context.Context, userID uuid.UUID) error {
+	const q = `UPDATE users SET onboarding_seen = true, updated_at = now() WHERE id = $1`
+	_, err := r.db.Exec(ctx, q, userID)
 	return err
 }
 
