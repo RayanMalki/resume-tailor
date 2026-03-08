@@ -24,7 +24,7 @@ func NewService(repo *Repo, jobsEnq jobs.JobsEnqueuer) *Service {
 }
 
 func (s *Service) CreateRun(ctx context.Context, userID,
-	resumeID uuid.UUID, jobText string, projectControls []ProjectControl, disciplineOverride *Discipline) (Run, error) {
+	resumeID uuid.UUID, jobText string, projectControls []ProjectControl, disciplineOverride *Discipline, creatorIP string) (Run, error) {
 
 	if userID == uuid.Nil {
 		return Run{}, fmt.Errorf("bad input: user_id")
@@ -52,7 +52,7 @@ func (s *Service) CreateRun(ctx context.Context, userID,
 		disciplineScore = 1.0
 	}
 
-	run, err := s.repo.CreateRun(ctx, userID, resumeID, jobText, normalizedControls, discipline, disciplineScore, disciplineSource)
+	run, err := s.repo.CreateRun(ctx, userID, resumeID, jobText, normalizedControls, discipline, disciplineScore, disciplineSource, creatorIP)
 	if err != nil {
 		return Run{}, err
 	}
@@ -142,6 +142,16 @@ func (s *Service) GetRunByID(ctx context.Context, userID, runID uuid.UUID) (Run,
 	}
 
 	return run, nil
+}
+
+// CountRunsTodayForUser returns how many runs the user has created today.
+func (s *Service) CountRunsTodayForUser(ctx context.Context, userID uuid.UUID) (int, error) {
+	return s.repo.CountRunsTodayForUser(ctx, userID)
+}
+
+// CountRunsTodayForIP returns how many runs have been created today from the given IP.
+func (s *Service) CountRunsTodayForIP(ctx context.Context, ip string) (int, error) {
+	return s.repo.CountRunsTodayForIP(ctx, ip)
 }
 
 func (s *Service) ListRunsByUser(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Run, error) {
