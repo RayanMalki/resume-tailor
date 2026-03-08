@@ -47,8 +47,9 @@ func parseContactFields(contact []string) (phone, email, linkedin, github string
 // RenderCoverLetter builds a LaTeX document for a professional cover letter.
 // name is the applicant's full name, contact is a slice of contact items,
 // and coverLetterText is the plain-text body (paragraphs separated by blank lines).
-func RenderCoverLetter(name string, contact []string, coverLetterText string) string {
+func RenderCoverLetter(name string, contact []string, coverLetterText, language string) string {
 	escapedName := escapeLatex(fallback(name, "Applicant"))
+	docLanguage, salutation, closing := coverLetterPhrases(language)
 
 	phone, email, linkedin, github := parseContactFields(contact)
 
@@ -70,11 +71,15 @@ func RenderCoverLetter(name string, contact []string, coverLetterText string) st
 	b.WriteString("\\usepackage{xcolor}\n")
 	b.WriteString("\\usepackage{parskip}\n")
 	b.WriteString("\\usepackage[T1]{fontenc}\n")
+	b.WriteString("\\usepackage[english,french]{babel}\n")
 	b.WriteString("\\definecolor{linkcolor}{HTML}{0366d6}\n")
 	b.WriteString("\\hypersetup{colorlinks=true, urlcolor=linkcolor, linkcolor=linkcolor}\n")
 	b.WriteString("\\pagestyle{empty}\n\n")
 
 	b.WriteString("\\begin{document}\n\n")
+	b.WriteString("\\selectlanguage{")
+	b.WriteString(docLanguage)
+	b.WriteString("}\n\n")
 
 	// Header: name on first line, contact details on second
 	b.WriteString("{\\LARGE \\textbf{")
@@ -109,14 +114,10 @@ func RenderCoverLetter(name string, contact []string, coverLetterText string) st
 	// Date
 	b.WriteString("\\today\n\n")
 
-	// Addressee
-	b.WriteString("\\vspace{10pt}\n")
-	b.WriteString("\\textbf{Hiring Manager} \\\\\n")
-	b.WriteString("\\textbf{Company Name}\n\n")
-
 	// Salutation
 	b.WriteString("\\vspace{14pt}\n")
-	b.WriteString("Dear Hiring Manager,\n\n")
+	b.WriteString(escapeLatex(salutation))
+	b.WriteString("\n\n")
 
 	// Body paragraphs
 	b.WriteString("\\vspace{6pt}\n")
@@ -130,7 +131,8 @@ func RenderCoverLetter(name string, contact []string, coverLetterText string) st
 
 	// Closing
 	b.WriteString("\n\\vspace{14pt}\n")
-	b.WriteString("Sincerely,\n\n")
+	b.WriteString(escapeLatex(closing))
+	b.WriteString("\n\n")
 	b.WriteString("\\vspace{28pt}\n")
 	b.WriteString("\\textbf{")
 	b.WriteString(escapedName)
@@ -138,4 +140,11 @@ func RenderCoverLetter(name string, contact []string, coverLetterText string) st
 
 	b.WriteString("\\end{document}\n")
 	return b.String()
+}
+
+func coverLetterPhrases(language string) (docLanguage, salutation, closing string) {
+	if isFrenchLanguage(language) {
+		return "french", "Madame, Monsieur,", "Cordialement,"
+	}
+	return "english", "Dear Hiring Team,", "Sincerely,"
 }
