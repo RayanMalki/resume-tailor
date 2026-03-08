@@ -254,8 +254,26 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		}
 	}
 
+	coverLetterPDFExists := false
+	if w.pdfEnabled && w.artifacts != nil {
+		if _, err := w.artifacts.GetByRunIDAndType(ctx, runID, artifacts.TypeCoverLetterPDF); err == nil {
+			coverLetterPDFExists = true
+		} else if err != nil && err != artifacts.ErrArtifactNotFound {
+			return fmt.Errorf("failed to check existing cover letter pdf artifact: %w", err)
+		}
+	}
+
+	coverLetterDOCXExists := false
+	if w.artifacts != nil {
+		if _, err := w.artifacts.GetByRunIDAndType(ctx, runID, artifacts.TypeCoverLetterDOCX); err == nil {
+			coverLetterDOCXExists = true
+		} else if err != nil && err != artifacts.ErrArtifactNotFound {
+			return fmt.Errorf("failed to check existing cover letter docx artifact: %w", err)
+		}
+	}
+
 	needsReasons := len(runData.ProjectControls) > 0
-	if reportExists && latexExists && docxExists && coverLetterExists && (pdfExists || !w.pdfEnabled) && (!needsReasons || reasonsExists) {
+	if reportExists && latexExists && docxExists && coverLetterExists && coverLetterDOCXExists && (pdfExists || !w.pdfEnabled) && (coverLetterPDFExists || !w.pdfEnabled) && (!needsReasons || reasonsExists) {
 		slog.Info("run report and artifacts already exist, skipping", "run_id", runID)
 		return nil
 	}
@@ -562,7 +580,7 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 		}
 
 		// Generate cover letter (best effort)
-		if !coverLetterExists {
+		if !coverLetterExists || !coverLetterDOCXExists || (w.pdfEnabled && !coverLetterPDFExists) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -570,17 +588,60 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 				if specGenerated && strings.TrimSpace(spec.Language) != "" {
 					resumeLang = spec.Language
 				}
-				coverLetter, err := w.aiClient.GenerateCoverLetter(ctx, resumeText, jobText, bm25Signals, resumeLang, ai.DisciplineContext{
-					Discipline:    string(effectiveDiscipline),
-					RoleFocus:     effectiveProfile.PromptHints.RoleFocus,
-					EvidenceFocus: effectiveProfile.PromptHints.EvidenceFocus,
-				})
-				if err != nil {
-					slog.Warn("failed to generate cover letter; continuing without cover letter artifact", "run_id", runID, "error", err)
-					return
+
+				var coverLetter string
+				if !coverLetterExists {
+					cl, err := w.aiClient.GenerateCoverLetter(ctx, resumeText, jobText, bm25Signals, resumeLang, ai.DisciplineContext{
+						Discipline:    string(effectiveDiscipline),
+						RoleFocus:     effectiveProfile.PromptHints.RoleFocus,
+						EvidenceFocus: effectiveProfile.PromptHints.EvidenceFocus,
+					})
+					if err != nil {
+						slog.Warn("failed to generate cover letter; continuing without cover letter artifact", "run_id", runID, "error", err)
+						return
+					}
+					coverLetter = cl
+					if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeCoverLetter, coverLetter); err != nil {
+						slog.Warn("failed to store cover letter artifact; continuing", "run_id", runID, "error", err)
+					}
+				} else {
+					existing, err := w.artifacts.GetByRunIDAndType(ctx, runID, artifacts.TypeCoverLetter)
+					if err != nil {
+						slog.Warn("failed to load existing cover letter; skipping pdf/docx generation", "run_id", runID, "error", err)
+						return
+					}
+					coverLetter = existing.Content
 				}
-				if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeCoverLetter, coverLetter); err != nil {
-					slog.Warn("failed to store cover letter artifact; continuing", "run_id", runID, "error", err)
+
+				// Build contact string from spec
+				clContact := buildContactString(spec.Contact)
+				clName := spec.Name
+
+				// Generate cover letter DOCX
+				if !coverLetterDOCXExists {
+					clDocxBytes, err := docx.RenderCoverLetter(clName, clContact, coverLetter)
+					if err != nil {
+						slog.Warn("failed to render cover letter docx; continuing", "run_id", runID, "error", err)
+					} else {
+						clDocxB64 := base64.StdEncoding.EncodeToString(clDocxBytes)
+						if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeCoverLetterDOCX, clDocxB64); err != nil {
+							slog.Warn("failed to store cover letter docx artifact; continuing", "run_id", runID, "error", err)
+						}
+					}
+				}
+
+				// Generate cover letter PDF
+				if w.pdfEnabled && !coverLetterPDFExists {
+					clLatex := latex.RenderCoverLetter(clName, clContact, coverLetter)
+					pdfBytes, err := latex.CompilePDF(ctx, w.tectonicBin, clLatex)
+					if err != nil {
+						slog.Warn("failed to compile cover letter pdf; continuing", "run_id", runID, "error", err)
+					} else {
+						clPdfB64 := base64.StdEncoding.EncodeToString(pdfBytes)
+						if err := w.artifacts.InsertIfNotExists(ctx, runID, artifacts.TypeCoverLetterPDF, clPdfB64); err != nil {
+							slog.Warn("failed to store cover letter pdf artifact; continuing", "run_id", runID, "error", err)
+						}
+					}
 				}
 			}()
 		}
@@ -684,6 +745,16 @@ func fallbackATSReport(addedKeywords, missingKeywords []string, resumeLang strin
 		Notes:   notes,
 		Summary: summary,
 	}
+}
+
+func buildContactString(contact []string) string {
+	var parts []string
+	for _, c := range contact {
+		if trimmed := strings.TrimSpace(c); trimmed != "" {
+			parts = append(parts, trimmed)
+		}
+	}
+	return strings.Join(parts, " · ")
 }
 
 func safeErrorMessage(err error) string {
