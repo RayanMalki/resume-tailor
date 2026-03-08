@@ -16,7 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes.Service, reportsSvc *runreports.Service, artifactsSvc *artifacts.Service, emailSvc *email.Sender, allowedOrigins []string) http.Handler {
+func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes.Service, reportsSvc *runreports.Service, artifactsSvc *artifacts.Service, emailSvc *email.Sender, allowedOrigins []string, apiKeyEncSecret string) http.Handler {
 	r := chi.NewRouter()
 
 	// Global middleware
@@ -49,7 +49,11 @@ func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes
 			r.Use(middleware.AuthRequired(authSvc))
 
 			//GET request
-			r.Get("/me", handlers.Me())
+			r.Get("/me", handlers.Me(authSvc))
+			r.Put("/me/password", handlers.MeUpdatePassword(authSvc))
+			r.Delete("/me", handlers.MeDelete(authSvc))
+			r.Put("/me/api-key", handlers.MeAPIKeyPut(authSvc, apiKeyEncSecret))
+			r.Delete("/me/api-key", handlers.MeAPIKeyDelete(authSvc))
 			r.Get("/runs/{runID}", handlers.GetRunByIdHandler(runsSvc))
 			r.Get("/runs/{runID}/report", handlers.GetRunReportHandler(runsSvc, reportsSvc))
 			r.Get("/runs/{runID}/artifacts/resume-latex", handlers.GetResumeLatexArtifactHandler(runsSvc, artifactsSvc))
