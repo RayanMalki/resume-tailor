@@ -8,17 +8,18 @@ import (
 )
 
 type User struct {
-	ID                uuid.UUID
-	Email             string
-	PasswordHash      string
-	DisplayName       string
-	AuthProvider      string
-	OAuthProvider     *string
-	OAuthSub          *string
-	AvatarURL         *string
+	ID                 uuid.UUID
+	Email              string
+	PasswordHash       string
+	DisplayName        string
+	AuthProvider       string
+	OAuthProvider      *string
+	OAuthSub           *string
+	AvatarURL          *string
 	EncryptedOpenAIKey *string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	OnboardingSeen     bool
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 var (
