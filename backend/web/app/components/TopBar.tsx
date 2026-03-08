@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "/api";
+const REPORT_PROBLEM_MAILTO =
+  "mailto:rayanmalki54@gmail.com?subject=Resume%20Tailor%20-%20Problem%20Report";
 
 interface MeResponse {
   userId: string;
@@ -105,6 +107,13 @@ export default function TopBar({ showLogout }: { showLogout?: boolean }) {
                   >
                     Settings
                   </button>
+                  <a
+                    href={REPORT_PROBLEM_MAILTO}
+                    onClick={() => setDropdownOpen(false)}
+                    className="block w-full px-4 py-3 text-left text-sm text-slate-200 hover:bg-white/5 transition"
+                  >
+                    Report problem
+                  </a>
                   <button
                     onClick={() => { setDropdownOpen(false); handleLogout(); }}
                     className="w-full rounded-b-xl px-4 py-3 text-left text-sm text-ember-300 hover:bg-white/5 transition"
@@ -154,6 +163,13 @@ export default function TopBar({ showLogout }: { showLogout?: boolean }) {
             >
               Settings
             </button>
+            <a
+              href={REPORT_PROBLEM_MAILTO}
+              onClick={() => setMobileOpen(false)}
+              className="w-full rounded-xl border border-white/10 bg-ink-900/60 px-4 py-3 text-left text-sm font-semibold text-slate-200 transition hover:border-ember-400/60 hover:text-ember-200"
+            >
+              Report problem
+            </a>
             <button
               onClick={() => { setMobileOpen(false); handleLogout(); }}
               className="w-full rounded-xl border border-ember-500/60 bg-ink-900/60 px-4 py-3 text-left text-sm font-semibold text-ember-200 transition hover:border-ember-400 hover:text-white"
