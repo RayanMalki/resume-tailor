@@ -82,7 +82,7 @@ func main() {
 	defer cleanupCancel()
 	authSvc.StartSessionCleanup(cleanupCtx, 1*time.Hour)
 
-	router := httpapi.NewRouter(authSvc, runsSvc, resumesSvc, runreportsSvc, artifactsSvc, emailSvc, allowedOrigins)
+	router := httpapi.NewRouter(authSvc, runsSvc, resumesSvc, runreportsSvc, artifactsSvc, emailSvc, allowedOrigins, cfg.APIKeyEncryptionSecret)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
