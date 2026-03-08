@@ -19,6 +19,8 @@ const (
 	TypeResumePDF      = "resume_pdf"
 	TypeResumeDOCX     = "resume_docx"
 	TypeCoverLetter    = "cover_letter"
+	TypeCoverLetterPDF = "cover_letter_pdf"
+	TypeCoverLetterDOCX = "cover_letter_docx"
 	TypeProjectReasons = "project_reasons"
 )
 
