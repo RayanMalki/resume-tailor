@@ -26,6 +26,13 @@ type ResumeItem = {
   title?: string;
 };
 
+type MeData = {
+  onboardingSeen: boolean;
+  hasApiKey: boolean;
+  dailyRunsUsed: number;
+  dailyRunsLimit: number;
+};
+
 type ScorePoint = {
   runId: string;
   score: number;
@@ -111,6 +118,7 @@ export default function DashboardPage() {
   const [runs, setRuns] = useState<RunItem[]>([]);
   const [resumes, setResumes] = useState<ResumeItem[]>([]);
   const [scores, setScores] = useState<ScorePoint[]>([]);
+  const [me, setMe] = useState<MeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -121,6 +129,15 @@ export default function DashboardPage() {
       if (meRes.status === 401) {
         router.push("/login");
         return;
+      }
+
+      if (meRes.ok) {
+        const meData = (await meRes.json()) as MeData;
+        setMe(meData);
+        if (!meData.onboardingSeen) {
+          router.push("/welcome");
+          return;
+        }
       }
 
       try {
@@ -221,13 +238,20 @@ export default function DashboardPage() {
               Track your tailored runs.
             </h1>
           </div>
-          <button
-            onClick={() => router.push("/resume")}
-            className="self-start rounded-full bg-ember-500 px-6 py-2.5 text-sm font-semibold text-ink-950 shadow-glow transition hover:-translate-y-0.5 hover:bg-ember-400 sm:self-auto"
-            aria-label="Start a new resume tailoring job"
-          >
-            Start a new job
-          </button>
+          <div className="flex items-center gap-3 self-start sm:self-auto">
+            {me && !me.hasApiKey && (
+              <span className="rounded-full border border-ember-500/40 bg-ember-950/40 px-3 py-1.5 text-xs font-semibold text-ember-300">
+                {me.dailyRunsUsed} / {me.dailyRunsLimit} free runs today
+              </span>
+            )}
+            <button
+              onClick={() => router.push("/resume")}
+              className="rounded-full bg-ember-500 px-6 py-2.5 text-sm font-semibold text-ink-950 shadow-glow transition hover:-translate-y-0.5 hover:bg-ember-400"
+              aria-label="Start a new resume tailoring job"
+            >
+              Start a new job
+            </button>
+          </div>
         </div>
 
         <section className="mt-8 grid gap-5 grid-cols-1 lg:grid-cols-[2fr_1fr]">
