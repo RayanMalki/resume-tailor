@@ -171,7 +171,9 @@ export default function ResultPage() {
   // ATS report state
   const [atsReport, setAtsReport] = useState<ATSReport | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
-  const [coverLetterPdfUrl, setCoverLetterPdfUrl] = useState<string | null>(null);
+  const [coverLetterPdfUrl, setCoverLetterPdfUrl] = useState<string | null>(
+    null,
+  );
   const [coverLetterPdfLoading, setCoverLetterPdfLoading] = useState(false);
 
   // Tab state
@@ -859,7 +861,7 @@ export default function ResultPage() {
                 className="rounded-full border border-white/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-200 transition hover:border-ember-400/60 hover:text-ember-200 sm:px-4 sm:py-1.5 sm:tracking-[0.2em]"
                 aria-label="Upload a new resume"
               >
-                New CV
+                New Resume
               </button>
               <button
                 onClick={handleGoToJob}
