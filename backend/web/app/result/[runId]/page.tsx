@@ -505,6 +505,82 @@ export default function ResultPage() {
     fetchCoverLetter();
   }, [latex, fetchPDF, fetchReport, fetchCoverLetter]);
 
+  /* ── Poll for ATS report until available (report is generated after LaTeX) ── */
+  useEffect(() => {
+    if (!latex || atsReport) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let attempts = 0;
+    const maxAttempts = 30; // ~60s total
+
+    const pollReport = async () => {
+      if (cancelled || attempts >= maxAttempts) return;
+      attempts++;
+      try {
+        const res = await fetch(`${API_BASE_URL}/v1/runs/${runId}/report`, {
+          credentials: "include",
+        });
+        if (res.status === 401) {
+          router.push("/login");
+          return;
+        }
+        if (res.ok) {
+          await fetchReport();
+          return;
+        }
+      } catch {
+        // ignore, retry
+      }
+      if (!cancelled) {
+        timer = setTimeout(pollReport, 2000);
+      }
+    };
+
+    timer = setTimeout(pollReport, 2000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [latex, atsReport, runId, router, fetchReport]);
+
+  /* ── Poll for cover letter until available (generated after LaTeX) ── */
+  useEffect(() => {
+    if (!latex || coverLetter) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let attempts = 0;
+    const maxAttempts = 30; // ~60s total
+
+    const pollCoverLetter = async () => {
+      if (cancelled || attempts >= maxAttempts) return;
+      attempts++;
+      try {
+        const res = await fetch(`${API_BASE_URL}/v1/runs/${runId}/artifacts/cover-letter`, {
+          credentials: "include",
+        });
+        if (res.status === 401) {
+          router.push("/login");
+          return;
+        }
+        if (res.ok) {
+          await fetchCoverLetter();
+          return;
+        }
+      } catch {
+        // ignore, retry
+      }
+      if (!cancelled) {
+        timer = setTimeout(pollCoverLetter, 2000);
+      }
+    };
+
+    timer = setTimeout(pollCoverLetter, 2000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [latex, coverLetter, runId, router, fetchCoverLetter]);
+
   /* ── Actions ────────────────────────────────────────────────── */
   const handleCopy = async () => {
     if (!latex) return;
