@@ -1,22 +1,60 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "/api";
 
+interface MeResponse {
+  userId: string;
+  email: string;
+  displayName: string;
+  avatarUrl: string | null;
+  authProvider: string;
+  hasApiKey: boolean;
+}
+
 export default function TopBar({ showLogout }: { showLogout?: boolean }) {
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [me, setMe] = useState<MeResponse | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showLogout) return;
+    fetch(`${API_BASE_URL}/v1/me`, {
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+      credentials: "include",
+    })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data) setMe(data); })
+      .catch(() => {});
+  }, [showLogout]);
+
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [dropdownOpen]);
 
   const handleLogout = async () => {
     await fetch(`${API_BASE_URL}/v1/auth/logout`, {
       method: "POST",
       headers: { "X-Requested-With": "XMLHttpRequest" },
-      credentials: "include"
+      credentials: "include",
     });
     router.push("/login");
   };
+
+  const initials = me
+    ? (me.displayName || me.email || "?")[0].toUpperCase()
+    : "?";
 
   return (
     <header className="w-full border-b border-white/10 bg-ink-950/70 backdrop-blur">
@@ -31,12 +69,7 @@ export default function TopBar({ showLogout }: { showLogout?: boolean }) {
           <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-ember-500/60 bg-ink-900 text-sm font-semibold text-ember-300 shadow-glow">
             RT
           </span>
-          <div>
-            <div className="text-base font-semibold text-white">Resume Tailor</div>
-            <div className="text-[11px] uppercase tracking-[0.3em] text-ember-300/80">
-              dashboard
-            </div>
-          </div>
+          <div className="text-base font-semibold text-white">Resume Tailor</div>
         </a>
 
         {/* Desktop nav */}
@@ -48,12 +81,39 @@ export default function TopBar({ showLogout }: { showLogout?: boolean }) {
             >
               Dashboard
             </button>
-            <button
-              onClick={handleLogout}
-              className="rounded-full border border-ember-500/60 bg-ink-900/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-ember-200 transition hover:border-ember-400 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
-            >
-              Logout
-            </button>
+
+            {/* Avatar with dropdown */}
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setDropdownOpen((o) => !o)}
+                className="flex h-9 w-9 items-center justify-center rounded-full overflow-hidden border border-white/20 bg-ink-900 hover:border-ember-400/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 transition"
+                aria-label="User menu"
+                aria-expanded={dropdownOpen}
+              >
+                {me?.avatarUrl ? (
+                  <img src={me.avatarUrl} alt={initials} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <span className="text-sm font-bold text-ember-300">{initials}</span>
+                )}
+              </button>
+
+              {dropdownOpen && (
+                <div className="absolute right-0 mt-2 w-40 rounded-xl border border-white/10 bg-ink-900 shadow-xl z-50">
+                  <button
+                    onClick={() => { setDropdownOpen(false); router.push("/settings"); }}
+                    className="w-full rounded-t-xl px-4 py-3 text-left text-sm text-slate-200 hover:bg-white/5 transition"
+                  >
+                    Settings
+                  </button>
+                  <button
+                    onClick={() => { setDropdownOpen(false); handleLogout(); }}
+                    className="w-full rounded-b-xl px-4 py-3 text-left text-sm text-ember-300 hover:bg-white/5 transition"
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         ) : null}
 
@@ -87,6 +147,12 @@ export default function TopBar({ showLogout }: { showLogout?: boolean }) {
               className="w-full rounded-xl border border-white/10 bg-ink-900/60 px-4 py-3 text-left text-sm font-semibold text-slate-200 transition hover:border-ember-400/60 hover:text-ember-200"
             >
               Dashboard
+            </button>
+            <button
+              onClick={() => { setMobileOpen(false); router.push("/settings"); }}
+              className="w-full rounded-xl border border-white/10 bg-ink-900/60 px-4 py-3 text-left text-sm font-semibold text-slate-200 transition hover:border-ember-400/60 hover:text-ember-200"
+            >
+              Settings
             </button>
             <button
               onClick={() => { setMobileOpen(false); handleLogout(); }}
