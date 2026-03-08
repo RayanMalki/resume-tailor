@@ -795,32 +795,36 @@ export default function ResultPage() {
                 ))}
               </div>
 
-              {/* Action buttons */}
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <button
-                  onClick={handleDownloadPDF}
-                  disabled={pdfLoading}
-                  className="rounded-full border border-ember-500/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-ember-200 transition hover:border-ember-400 hover:text-white disabled:opacity-50 sm:tracking-[0.2em]"
-                  aria-label="Download resume as PDF"
-                >
-                  {pdfLoading ? "Preparing\u2026" : "Download PDF"}
-                </button>
-                <button
-                  onClick={handleDownloadDOCX}
-                  className="rounded-full border border-emerald-500/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-emerald-200 transition hover:border-emerald-400 hover:text-white sm:tracking-[0.2em]"
-                  aria-label="Download resume as DOCX"
-                >
-                  Download DOCX
-                </button>
-                <button
-                  onClick={handleCopy}
-                  className="rounded-full border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-200 transition hover:border-ember-400 hover:text-ember-200 sm:tracking-[0.2em]"
-                  aria-label="Copy LaTeX source to clipboard"
-                >
-                  Copy LaTeX
-                </button>
-              </div>
-              {pdfError && <p className="mt-2 text-xs text-rose-300">{pdfError}</p>}
+              {/* Action buttons — only shown on PDF Preview tab */}
+              {activeTab === "preview" && (
+                <>
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={handleDownloadPDF}
+                      disabled={pdfLoading}
+                      className="rounded-full border border-ember-500/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-ember-200 transition hover:border-ember-400 hover:text-white disabled:opacity-50 sm:tracking-[0.2em]"
+                      aria-label="Download resume as PDF"
+                    >
+                      {pdfLoading ? "Preparing\u2026" : "Download PDF"}
+                    </button>
+                    <button
+                      onClick={handleDownloadDOCX}
+                      className="rounded-full border border-emerald-500/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-emerald-200 transition hover:border-emerald-400 hover:text-white sm:tracking-[0.2em]"
+                      aria-label="Download resume as DOCX"
+                    >
+                      Download DOCX
+                    </button>
+                    <button
+                      onClick={handleCopy}
+                      className="rounded-full border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-200 transition hover:border-ember-400 hover:text-ember-200 sm:tracking-[0.2em]"
+                      aria-label="Copy LaTeX source to clipboard"
+                    >
+                      Copy LaTeX
+                    </button>
+                  </div>
+                  {pdfError && <p className="mt-2 text-xs text-rose-300">{pdfError}</p>}
+                </>
+              )}
 
               {/* ── PDF Preview Tab ──────────────────────────── */}
               <div
