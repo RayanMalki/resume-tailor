@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"resume-tailor/internal/auth"
 	"resume-tailor/internal/httpapi/middleware"
 	"resume-tailor/internal/notify"
 	"resume-tailor/internal/resumes"
@@ -27,7 +28,12 @@ type CreateRunResponse struct {
 	RunID string `json:"runId"`
 }
 
-func CreateRunHandler(runsSvc *runs.Service, resumesSvc *resumes.Service) http.HandlerFunc {
+const (
+	freeTierDailyUserLimit = 3
+	freeTierDailyIPLimit   = 6
+)
+
+func CreateRunHandler(runsSvc *runs.Service, resumesSvc *resumes.Service, authSvc *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := middleware.UserIDFromContext(r.Context())
 		if !ok {
@@ -56,6 +62,40 @@ func CreateRunHandler(runsSvc *runs.Service, resumesSvc *resumes.Service) http.H
 			}()
 			writeError(w, http.StatusTooManyRequests, "rate_limited")
 			return
+		}
+
+		// DB-backed daily limit for users without a personal API key.
+		user, err := authSvc.GetUserByID(r.Context(), userID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal server error")
+			return
+		}
+
+		creatorIP := ""
+		if user.EncryptedOpenAIKey == nil {
+			ip := middleware.ClientIP(r)
+
+			userCount, err := runsSvc.CountRunsTodayForUser(r.Context(), userID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "internal server error")
+				return
+			}
+			if userCount >= freeTierDailyUserLimit {
+				writeError(w, http.StatusTooManyRequests, "daily_limit_reached")
+				return
+			}
+
+			ipCount, err := runsSvc.CountRunsTodayForIP(r.Context(), ip)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "internal server error")
+				return
+			}
+			if ipCount >= freeTierDailyIPLimit {
+				writeError(w, http.StatusTooManyRequests, "ip_limit_reached")
+				return
+			}
+
+			creatorIP = ip
 		}
 
 		var req CreateRunRequest
@@ -91,7 +131,7 @@ func CreateRunHandler(runsSvc *runs.Service, resumesSvc *resumes.Service) http.H
 			disciplineOverride = &parsed
 		}
 
-		run, err := runsSvc.CreateRun(r.Context(), userID, resumeID, req.JobText, req.ProjectControls, disciplineOverride)
+		run, err := runsSvc.CreateRun(r.Context(), userID, resumeID, req.JobText, req.ProjectControls, disciplineOverride, creatorIP)
 		if err != nil {
 			if errors.Is(err, runs.ErrBadInput) {
 				// Return the detailed validation message (ex: "bad input: job_text")
