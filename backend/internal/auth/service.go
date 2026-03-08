@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"resume-tailor/internal/crypto"
+
 	"github.com/google/uuid"
 )
 
@@ -135,7 +137,7 @@ func (s *Service) LoginWithUser(ctx context.Context, email string, password stri
 
 }
 
-func (s *Service) LoginWithOAuth(ctx context.Context, provider, sub, email, displayName string) (token string, expiresAt time.Time, userID uuid.UUID, err error) {
+func (s *Service) LoginWithOAuth(ctx context.Context, provider, sub, email, displayName, avatarURL string) (token string, expiresAt time.Time, userID uuid.UUID, err error) {
 	if strings.TrimSpace(provider) == "" || strings.TrimSpace(sub) == "" {
 		return "", time.Time{}, uuid.Nil, fmt.Errorf("oauth provider info missing")
 	}
@@ -146,6 +148,16 @@ func (s *Service) LoginWithOAuth(ctx context.Context, provider, sub, email, disp
 	}
 
 	if err == nil {
+		// Refresh avatar URL if it has changed.
+		if avatarURL != "" {
+			var current *string
+			if user.AvatarURL != nil {
+				current = user.AvatarURL
+			}
+			if current == nil || *current != avatarURL {
+				_ = s.repo.UpdateAvatarURL(ctx, user.ID, &avatarURL)
+			}
+		}
 		return s.createSession(ctx, user.ID)
 	}
 
@@ -156,6 +168,9 @@ func (s *Service) LoginWithOAuth(ctx context.Context, provider, sub, email, disp
 		if err == nil {
 			if existing.OAuthProvider == nil && existing.OAuthSub == nil {
 				_ = s.repo.LinkOAuth(ctx, existing.ID, provider, sub)
+				if avatarURL != "" {
+					_ = s.repo.UpdateAvatarURL(ctx, existing.ID, &avatarURL)
+				}
 				return s.createSession(ctx, existing.ID)
 			}
 			return "", time.Time{}, uuid.Nil, ErrInvalidCredentials
@@ -178,12 +193,58 @@ func (s *Service) LoginWithOAuth(ctx context.Context, provider, sub, email, disp
 		return "", time.Time{}, uuid.Nil, err
 	}
 
-	id, err := s.repo.CreateOAuthUser(ctx, email, randomHash, displayName, provider, sub)
+	id, err := s.repo.CreateOAuthUser(ctx, email, randomHash, displayName, provider, sub, avatarURL)
 	if err != nil {
 		return "", time.Time{}, uuid.Nil, err
 	}
 
 	return s.createSession(ctx, id)
+}
+
+// GetUserByID returns the user with the given ID.
+func (s *Service) GetUserByID(ctx context.Context, userID uuid.UUID) (User, error) {
+	return s.repo.GetUserByID(ctx, userID)
+}
+
+// ChangePassword validates currentPassword and replaces the hash with newPassword.
+func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, currentPassword, newPassword string) error {
+	user, err := s.repo.GetUserByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if user.AuthProvider != "" && user.AuthProvider != "local" {
+		return fmt.Errorf("password change not available for OAuth accounts")
+	}
+	if err := CheckPassword(user.PasswordHash, currentPassword); err != nil {
+		return ErrInvalidCredentials
+	}
+	if err := validatePassword(newPassword); err != nil {
+		return err
+	}
+	hash, err := HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+	return s.repo.UpdatePasswordHash(ctx, userID, hash)
+}
+
+// SetAPIKey encrypts plaintextKey with encSecret and stores it for the user.
+func (s *Service) SetAPIKey(ctx context.Context, userID uuid.UUID, plaintextKey, encSecret string) error {
+	encrypted, err := crypto.Encrypt(encSecret, plaintextKey)
+	if err != nil {
+		return err
+	}
+	return s.repo.SetEncryptedAPIKey(ctx, userID, &encrypted)
+}
+
+// RemoveAPIKey clears the stored encrypted API key for the user.
+func (s *Service) RemoveAPIKey(ctx context.Context, userID uuid.UUID) error {
+	return s.repo.SetEncryptedAPIKey(ctx, userID, nil)
+}
+
+// DeleteAccount permanently deletes the user and all their data.
+func (s *Service) DeleteAccount(ctx context.Context, userID uuid.UUID) error {
+	return s.repo.DeleteUser(ctx, userID)
 }
 
 func (s *Service) createSession(ctx context.Context, userID uuid.UUID) (token string, expiresAt time.Time, outUserID uuid.UUID, err error) {
