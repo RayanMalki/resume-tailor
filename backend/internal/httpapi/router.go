@@ -56,6 +56,8 @@ func NewRouter(authSvc *auth.Service, runsSvc *runs.Service, resumesSvc *resumes
 			r.Get("/runs/{runID}/artifacts/resume-pdf", handlers.GetResumePDFArtifactHandler(runsSvc, artifactsSvc))
 			r.Get("/runs/{runID}/artifacts/resume-docx", handlers.GetResumeDOCXArtifactHandler(runsSvc, artifactsSvc))
 			r.Get("/runs/{runID}/artifacts/cover-letter", handlers.GetCoverLetterArtifactHandler(runsSvc, artifactsSvc))
+			r.Get("/runs/{runID}/artifacts/cover-letter-pdf", handlers.GetCoverLetterPDFArtifactHandler(runsSvc, artifactsSvc))
+			r.Get("/runs/{runID}/artifacts/cover-letter-docx", handlers.GetCoverLetterDOCXArtifactHandler(runsSvc, artifactsSvc))
 			r.Get("/runs/{runID}/artifacts/project-reasons", handlers.GetProjectReasonsArtifactHandler(runsSvc, artifactsSvc))
 			r.Get("/runs", handlers.ListRunsHandler(runsSvc))
 			r.Get("/resumes", handlers.ListResumesHandler(resumesSvc))
