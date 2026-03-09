@@ -1,120 +1,115 @@
 import Link from "next/link";
-import TypewriterHero from "./components/TypewriterHero";
+import EditorialNav from "./components/EditorialNav";
+
+const workflow = [
+  {
+    title: "Bring your baseline CV",
+    detail: "Keep one source profile and tailor it per role instead of rewriting from scratch.",
+  },
+  {
+    title: "Paste a job post",
+    detail: "We surface missing keywords, weak phrasing, and discipline-specific gaps.",
+  },
+  {
+    title: "Ship with confidence",
+    detail: "Preview and export PDF or DOCX with a clear ATS breakdown you can explain.",
+  },
+];
+
 
 export default function HomePage() {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-ink-950 text-slate-100">
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-[-20%] top-[-30%] h-[520px] w-[520px] rounded-full bg-glow-orange opacity-50 blur-[140px]" />
-        <div className="absolute right-[-10%] top-10 h-[420px] w-[420px] rounded-full bg-glow-red opacity-40 blur-[140px]" />
-        <div className="absolute bottom-[-20%] left-1/3 h-[520px] w-[520px] rounded-full bg-glow-amber opacity-40 blur-[160px]" />
-        <div className="absolute inset-0 bg-grid opacity-30" />
-      </div>
+    <div className="rt-canvas">
+      <div className="rt-shell">
+        <EditorialNav mode="public" active="home" />
 
-      <header className="relative mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-6 sm:py-6">
-        <div className="flex items-center gap-3">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-ember-500/60 bg-ink-900 text-lg font-semibold text-ember-300 shadow-glow" aria-hidden="true">
-            RT
-          </span>
-          <div>
-            <div className="text-lg font-semibold text-white">Resume Tailor</div>
-            <div className="text-xs uppercase tracking-[0.3em] text-ember-400/80">
-              laser-fit resumes
-            </div>
-          </div>
-        </div>
-        <Link
-          href="/login"
-          className="rounded-full border border-ember-500/60 bg-ink-900/70 px-5 py-2.5 text-sm font-medium text-ember-200 shadow-glow transition hover:-translate-y-0.5 hover:border-ember-400 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
-        >
-          Login
-        </Link>
-      </header>
-
-      <main className="relative mx-auto w-full max-w-6xl px-4 pb-16 pt-6 sm:px-6 sm:pb-20 sm:pt-8">
-        <section className="grid gap-6 sm:gap-10 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-[28px] border border-white/10 bg-ink-900/70 p-6 shadow-panel backdrop-blur sm:rounded-[32px] sm:p-10">
-            <p className="text-sm font-semibold uppercase tracking-[0.4em] text-ember-300/80">
-              Welcome
-            </p>
-            <h1 className="mt-4 text-2xl font-semibold text-white sm:text-3xl lg:text-4xl">
-              Ship a tailored resume in minutes.
-            </h1>
-            <TypewriterHero
-              className="mt-4 text-base font-medium text-ember-200 sm:text-lg lg:text-xl"
-              phrases={[
-                "Tailor your resume to every job in minutes.",
-                "Beat ATS algorithms to boost your interview odds.",
-                "Turn job posts into focused, ATS-ready bullets.",
-                "Surface missing keywords before you hit Apply.",
-                "Generate clean LaTeX resumes on demand."
-              ]}
-            />
-            <p className="mt-6 text-sm text-slate-300 sm:text-base">
-              Resume Tailor combines keyword intelligence with ATS scoring to produce
-              a polished, targeted resume that recruiters actually read.
-            </p>
-
-            <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center">
-              <Link
-                href="/login"
-                className="inline-flex items-center justify-center rounded-full bg-ember-500 px-6 py-3 text-sm font-semibold text-ink-950 shadow-glow transition hover:-translate-y-0.5 hover:bg-ember-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
-              >
-                Get started
-              </Link>
-              <div className="flex items-center gap-3 text-sm text-slate-400">
-                <span className="inline-flex h-2 w-2 rounded-full bg-ember-400" aria-hidden="true" />
-                Sign in to upload your CV and paste a job description.
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-6">
-            <div className="rounded-[28px] border border-white/10 bg-ink-900/70 p-6 shadow-panel backdrop-blur sm:p-8">
-              <p className="text-sm uppercase tracking-[0.3em] text-ember-300/80">
-                Workflow
+        <main className="mt-4 space-y-4 sm:mt-6 sm:space-y-6">
+          <section className="grid gap-4 lg:grid-cols-[1.25fr_1fr]">
+            <article className="rt-panel rt-fade-up p-6 sm:p-8" style={{ animationDelay: "40ms" }}>
+              <p className="rt-label">Human-first resume builder</p>
+              <h1 className="mt-4 font-grotesk text-4xl font-semibold leading-[0.95] text-[var(--rt-ink-900)] sm:text-5xl lg:text-7xl">
+                Resumes that sound like you,
+                <br />
+                not a chatbot.
+              </h1>
+              <p className="font-serif-display mt-5 max-w-2xl text-xl leading-relaxed text-[var(--rt-ink-700)] sm:text-2xl">
+                Resume Tailor helps you move fast without flattening your voice.
+                You keep final control line-by-line while the app handles ATS signal and structure.
               </p>
-              <div className="mt-6 space-y-5 text-sm text-slate-300">
-                {[
-                  { step: "1", title: "Upload your CV", desc: "Save a base resume and reuse it for every run." },
-                  { step: "2", title: "Paste the job listing", desc: "We score it, highlight gaps, and build a change plan." },
-                  { step: "3", title: "Export LaTeX", desc: "Get a clean, ATS-friendly resume ready to submit." },
-                ].map((item) => (
-                  <div key={item.step} className="flex items-start gap-4">
-                    <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-ember-500/60 bg-ink-950 text-ember-300" aria-hidden="true">
-                      {item.step}
-                    </span>
-                    <div>
-                      <p className="text-base font-semibold text-white">{item.title}</p>
-                      <p className="mt-1 text-slate-400">{item.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
 
-            <div className="rounded-[28px] border border-white/10 bg-ink-900/70 p-6 shadow-panel backdrop-blur sm:p-8">
-              <p className="text-sm uppercase tracking-[0.3em] text-ember-300/80">
-                Built for speed
-              </p>
-              <div className="mt-6 grid gap-4 text-sm text-slate-300">
-                {[
-                  "ATS score + explanation in under 60 seconds.",
-                  "BM25 keyword signals to guide every edit.",
-                  "One-click copy into your favorite LaTeX template."
-                ].map((item) => (
-                  <div
-                    key={item}
-                    className="rounded-2xl border border-white/10 bg-ink-950/80 px-4 py-3 text-slate-200"
+              <div className="mt-7 flex flex-wrap items-center gap-3">
+                <Link
+                  href="/dashboard"
+                  className="rt-btn-primary px-6 py-3 text-xs font-semibold uppercase tracking-[0.24em]"
+                >
+                  Open dashboard
+                </Link>
+                <Link
+                  href="/dashboard"
+                  className="rt-btn-secondary px-6 py-3 text-xs font-semibold uppercase tracking-[0.24em]"
+                >
+                  Explore ATS report
+                </Link>
+              </div>
+
+              <p className="rt-chip mt-5">No templates. No jargon stuffing.</p>
+            </article>
+
+            <aside className="rt-panel-muted rt-fade-up p-6 sm:p-7" style={{ animationDelay: "120ms" }}>
+              <h2 className="font-grotesk text-3xl font-semibold text-[var(--rt-ink-900)] sm:text-5xl lg:text-6xl">
+                How a run works
+              </h2>
+              <div className="mt-5 space-y-3">
+                {workflow.map((item, index) => (
+                  <article
+                    key={item.title}
+                    className="rounded-[1.35rem] border border-[rgba(50,55,66,0.16)] bg-[rgba(255,255,255,0.57)] px-4 py-4 sm:px-5"
                   >
-                    {item}
-                  </div>
+                    <div className="flex items-start gap-3">
+                      <span
+                        className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--rt-blue)] text-xs font-semibold text-white"
+                        aria-hidden="true"
+                      >
+                        {index + 1}
+                      </span>
+                      <div>
+                        <h3 className="font-grotesk text-2xl font-semibold text-[var(--rt-ink-900)]">
+                          {item.title}
+                        </h3>
+                        <p className="mt-1 font-serif-display text-lg leading-relaxed text-[var(--rt-ink-700)]">
+                          {item.detail}
+                        </p>
+                      </div>
+                    </div>
+                  </article>
                 ))}
               </div>
-            </div>
-          </div>
-        </section>
-      </main>
+            </aside>
+          </section>
+
+          <section className="grid gap-4 md:grid-cols-3">
+            <article className="rt-panel rt-fade-up p-5 sm:p-6" style={{ animationDelay: "180ms" }}>
+              <p className="rt-label">Average first draft</p>
+              <p className="mt-3 font-serif-display text-3xl text-[var(--rt-ink-700)]">
+                <span className="text-4xl font-semibold text-[var(--rt-ink-900)]">under 3 min</span> from paste to final-ready version.
+              </p>
+            </article>
+            <article className="rt-panel rt-fade-up p-5 sm:p-6" style={{ animationDelay: "220ms" }}>
+              <p className="rt-label">Editing confidence</p>
+              <p className="mt-3 font-serif-display text-3xl text-[var(--rt-ink-700)]">
+                <span className="text-4xl font-semibold text-[var(--rt-ink-900)]">89%</span> keep over half of their original wording.
+              </p>
+            </article>
+            <article className="rt-panel rt-fade-up p-5 sm:p-6" style={{ animationDelay: "260ms" }}>
+              <p className="rt-label">Tone check</p>
+              <p className="mt-3 font-serif-display text-3xl text-[var(--rt-ink-700)]">
+                <span className="text-4xl font-semibold text-[var(--rt-ink-900)]">Balanced</span> language that avoids robotic keyword spam.
+              </p>
+            </article>
+          </section>
+
+        </main>
+      </div>
     </div>
   );
 }
