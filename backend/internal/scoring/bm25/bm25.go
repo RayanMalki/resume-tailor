@@ -121,6 +121,15 @@ func ComputeWithProfile(resumeText, jobText string, profile profiles.Profile) (S
 	jobFreq := termFreq(jobTokens)
 	resumeFreq := termFreq(resumeTokens)
 
+	normalizedJob := normalizeForTokenization(jobText)
+	normalizedResume := normalizeForTokenization(resumeText)
+	for phrase, count := range extractPhraseCounts(normalizedJob) {
+		jobFreq[phrase] += count
+	}
+	for phrase, count := range extractPhraseCounts(normalizedResume) {
+		resumeFreq[phrase] += count
+	}
+
 	overlapTerms := make([]string, 0)
 	missingTerms := make([]TermScore, 0)
 	topTerms := make([]TermScore, 0, len(jobFreq))
@@ -276,7 +285,25 @@ func classifyTerm(term string) string {
 	return categoryOther
 }
 
+// extractPhraseCounts scans normalizedText for all known phrases and returns
+// their occurrence counts. normalizedText must already be lowercased/accent-stripped.
+func extractPhraseCounts(normalizedText string) map[string]int {
+	counts := make(map[string]int, len(phraseIDF))
+	for phrase := range phraseIDF {
+		if n := strings.Count(normalizedText, phrase); n > 0 {
+			counts[phrase] = n
+		}
+	}
+	return counts
+}
+
 func bucketForTerm(profile profiles.Profile, term string) string {
+	if strings.Contains(term, " ") {
+		if cat, ok := phraseCategories[term]; ok {
+			return cat
+		}
+		return categoryOther
+	}
 	bucket := profiles.BucketForTerm(profile, term)
 	if bucket != "" && bucket != categoryOther {
 		return bucket
@@ -296,6 +323,10 @@ func isLowSignalTerm(term, category string, idf float64, profile profiles.Profil
 	}
 	if _, ok := lowSignalTerms[term]; ok {
 		return true
+	}
+	// Curated phrases are always surfaced regardless of category or IDF.
+	if _, ok := phraseIDF[term]; ok {
+		return false
 	}
 	// "Other" terms are shown only if they look highly distinctive.
 	if category == categoryOther && idf < highIDFOtherThreshold {

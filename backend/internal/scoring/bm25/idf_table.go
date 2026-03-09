@@ -664,10 +664,134 @@ var corpusIDF = map[string]float64{
 	"baccalaureat": 3.0, // baccalauréat = bachelor's (QC) / high school diploma (FR)
 }
 
+// phraseIDF maps multi-word phrases (space-separated, lowercased) to their IDF values.
+// These are curated known phrases — not adjacent bigrams — to avoid false positives.
+var phraseIDF = map[string]float64{
+	// ── AI / ML ────────────────────────────────────────────────────────
+	"machine learning":       4.0,
+	"deep learning":          5.0,
+	"natural language":       5.2,
+	"natural language processing": 5.5,
+	"computer vision":        5.5,
+	"neural network":         5.2,
+	"neural networks":        5.2,
+	"large language":         5.8,
+	"reinforcement learning": 6.0,
+	"transfer learning":      6.2,
+	// ── Data ───────────────────────────────────────────────────────────
+	"data science":     4.2,
+	"data engineering": 5.2,
+	"data analysis":    4.0,
+	"data analytics":   4.2,
+	// ── Cloud / Infrastructure ──────────────────────────────────────────
+	"cloud native":     5.2,
+	"cloud computing":  3.8,
+	"high availability": 5.0,
+	"load balancing":   5.2,
+	"message queue":    5.5,
+	"service mesh":     5.8,
+	"infrastructure as": 5.5,
+	// ── Engineering practices ───────────────────────────────────────────
+	"full stack":             4.5,
+	"front end":              3.5,
+	"back end":               3.5,
+	"continuous integration": 4.8,
+	"continuous delivery":    5.0,
+	"test driven":            5.5,
+	"domain driven":          5.8,
+	"object oriented":        4.5,
+	"distributed systems":    5.0,
+	"real time":              4.5,
+	"event driven":           5.2,
+	"software engineering":   2.8,
+	"software development":   2.5,
+	"version control":        4.2,
+	"code review":            4.0,
+	// ── Business ───────────────────────────────────────────────────────
+	"product management": 3.5,
+	"project management": 3.2,
+	// ── Mechanical / Electrical / Industrial ───────────────────────────
+	"finite element":     6.5,
+	"computational fluid": 6.8,
+	"fluid dynamics":     6.5,
+	"heat transfer":      6.5,
+	"printed circuit":    6.5,
+	"embedded systems":   5.8,
+	"signal processing":  6.0,
+	"power electronics":  6.5,
+	"supply chain":       5.5,
+	"lean manufacturing": 6.0,
+	"quality assurance":  5.0,
+	"failure mode":       6.5,
+}
+
+// phraseCategories maps each phrase key to its scoring bucket.
+var phraseCategories = map[string]string{
+	// AI / ML → practices
+	"machine learning":            categoryPractices,
+	"deep learning":               categoryPractices,
+	"natural language":            categoryPractices,
+	"natural language processing": categoryPractices,
+	"computer vision":             categoryPractices,
+	"neural network":              categoryPractices,
+	"neural networks":             categoryPractices,
+	"large language":              categoryPractices,
+	"reinforcement learning":      categoryPractices,
+	"transfer learning":           categoryPractices,
+	// Data → practices
+	"data science":     categoryPractices,
+	"data engineering": categoryPractices,
+	"data analysis":    categoryPractices,
+	"data analytics":   categoryPractices,
+	// Cloud / Infrastructure → cloud_devops_db
+	"cloud native":      categoryCloudDevOps,
+	"cloud computing":   categoryCloudDevOps,
+	"high availability": categoryCloudDevOps,
+	"load balancing":    categoryCloudDevOps,
+	"message queue":     categoryCloudDevOps,
+	"service mesh":      categoryCloudDevOps,
+	"infrastructure as": categoryCloudDevOps,
+	// Engineering practices → practices
+	"full stack":             categoryPractices,
+	"front end":              categoryPractices,
+	"back end":               categoryPractices,
+	"continuous integration": categoryPractices,
+	"continuous delivery":    categoryPractices,
+	"test driven":            categoryPractices,
+	"domain driven":          categoryPractices,
+	"object oriented":        categoryPractices,
+	"distributed systems":    categoryPractices,
+	"real time":              categoryPractices,
+	"event driven":           categoryPractices,
+	"software engineering":   categoryPractices,
+	"software development":   categoryPractices,
+	"version control":        categoryPractices,
+	"code review":            categoryPractices,
+	// Business → soft_skills
+	"product management": categorySoftSkills,
+	"project management": categorySoftSkills,
+	// Mechanical / Electrical / Industrial
+	"finite element":      "simulation_analysis",
+	"computational fluid": "simulation_analysis",
+	"fluid dynamics":      "simulation_analysis",
+	"heat transfer":       "simulation_analysis",
+	"printed circuit":     "electronics",
+	"embedded systems":    "electronics",
+	"signal processing":   "electronics",
+	"power electronics":   "electronics",
+	"supply chain":        "operations",
+	"lean manufacturing":  "operations",
+	"quality assurance":   "operations",
+	"failure mode":        "simulation_analysis",
+}
+
 // lookupIDF returns the IDF value for a given term from the static table.
 // It also checks canonical synonym forms. Unknown terms receive defaultCorpusIDF.
 func lookupIDF(term string) float64 {
 	if v, ok := corpusIDF[term]; ok {
+		return v
+	}
+	if v, ok := phraseIDF[term]; ok {
 		return v
 	}
 	// Try the canonical form (e.g. "go" → "golang")

@@ -354,3 +354,101 @@ func hasExplicitIDF(term string) bool {
 	}
 	return false
 }
+
+func TestExtractPhraseCounts(t *testing.T) {
+	text := normalizeForTokenization("experience with machine learning and deep learning systems")
+	counts := extractPhraseCounts(text)
+	if counts["machine learning"] != 1 {
+		t.Fatalf("expected 'machine learning' count=1, got %d", counts["machine learning"])
+	}
+	if counts["deep learning"] != 1 {
+		t.Fatalf("expected 'deep learning' count=1, got %d", counts["deep learning"])
+	}
+	if counts["computer vision"] != 0 {
+		t.Fatalf("expected 'computer vision' count=0, got %d", counts["computer vision"])
+	}
+}
+
+func TestPhraseMatchedWhenPresent(t *testing.T) {
+	resume := "I have experience with machine learning pipelines"
+	job := "proficiency in machine learning is required"
+
+	got, err := Compute(resume, job)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, term := range got.OverlapTerms {
+		if term == "machine learning" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected 'machine learning' in OverlapTerms, got %v", got.OverlapTerms)
+	}
+}
+
+func TestPhraseMissingWhenAbsent(t *testing.T) {
+	resume := "python developer with statistics background"
+	job := "experience with machine learning required"
+
+	got, err := Compute(resume, job)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, ts := range got.MissingJobTerms {
+		if ts.Term == "machine learning" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected 'machine learning' in MissingJobTerms, got %v", got.MissingJobTerms)
+	}
+}
+
+func TestPhraseIDFExceedsConstituentUnigrams(t *testing.T) {
+	phraseVal := lookupIDF("machine learning")
+	machineVal := lookupIDF("machine")
+	learningVal := lookupIDF("learning")
+
+	if phraseVal <= machineVal {
+		t.Fatalf("phrase IDF %.2f should exceed 'machine' IDF %.2f", phraseVal, machineVal)
+	}
+	if phraseVal <= learningVal {
+		t.Fatalf("phrase IDF %.2f should exceed 'learning' IDF %.2f", phraseVal, learningVal)
+	}
+}
+
+func TestCuratedPhraseNotSuppressedInOtherCategory(t *testing.T) {
+	profile := profiles.Get(profiles.DisciplineITSoftware)
+	resume := "python developer"
+	job := "python developer with finite element analysis experience"
+
+	got, err := ComputeWithProfile(resume, job, profile)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, ts := range got.MissingJobTerms {
+		if ts.Term == "finite element" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected curated phrase 'finite element' visible in MissingJobTerms, got %v", got.MissingJobTerms)
+	}
+}
+
+func TestPhraseBucketAssignment(t *testing.T) {
+	bucket := bucketForTerm(profiles.Get(profiles.DisciplineITSoftware), "cloud native")
+	if bucket != categoryCloudDevOps {
+		t.Fatalf("expected 'cloud native' in %s, got %s", categoryCloudDevOps, bucket)
+	}
+}
