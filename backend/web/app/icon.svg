@@ -1,17 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <defs>
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="1.2" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-  </defs>
-  <!-- Dark background -->
-  <rect width="32" height="32" rx="7" fill="#0d0d0d"/>
-  <!-- Neon border -->
-  <rect x="1.5" y="1.5" width="29" height="29" rx="6" stroke="#00ffaa" stroke-width="1.5" fill="none" filter="url(#glow)" opacity="0.9"/>
-  <!-- RT text with neon glow -->
-  <text x="16" y="22" font-family="system-ui, ui-monospace, monospace" font-size="14" font-weight="700" fill="#00ffaa" text-anchor="middle" filter="url(#glow)" letter-spacing="0.5">RT</text>
+  <!-- Warm amber background -->
+  <rect width="32" height="32" rx="7" fill="#f2b66f"/>
+  <!-- Subtle border -->
+  <rect x="1" y="1" width="30" height="30" rx="6.5" stroke="rgba(49,45,35,0.28)" stroke-width="1" fill="none"/>
+  <!-- RT text -->
+  <text x="16" y="22" font-family="system-ui, sans-serif" font-size="13" font-weight="700" fill="#151513" text-anchor="middle" letter-spacing="0.5">RT</text>
 </svg>
