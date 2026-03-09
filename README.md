@@ -1,210 +1,175 @@
 # Resume Tailor
 
-Resume Tailor is a full-stack application that analyzes a resume against a job description and generates tailored application assets.
+Resume Tailor analyzes a resume against a job description and generates a full set of tailored application assets — ATS report, improved resume, and cover letter.
 
-It combines profile-aware BM25 scoring with LLM generation and deterministic rendering in a production-style architecture:
-- Go API for auth, resumes, runs, reports, and artifacts
-- Go worker for asynchronous run processing
-- PostgreSQL for persistence and queueing
-- Next.js frontend for user workflows
+It combines profile-aware BM25 keyword scoring with LLM generation and deterministic rendering in a production-style architecture.
+
+---
 
 ## What It Generates
-- ATS report (score, summary, notes, interview questions)
-- Programmatic change plan based on BM25 diffs
-- Tailored resume in LaTeX
-- Tailored resume in DOCX
-- Optional resume PDF (when PDF compilation is enabled)
-- Cover letter text
-- Cover letter DOCX
-- Optional cover letter PDF
-- Project relevance reasons (when project controls are provided)
 
-## Key Capabilities
-- Email/password auth with HttpOnly sessions
-- Google OAuth login
-- Password reset and email verification endpoints
-- Resume upload (`.pdf` and `.docx`) with server-side text extraction
-- Run queue with retries and worker-based processing
-- Discipline detection and discipline-aware scoring/prompting
-- User project controls (`pinned`, `auto`, `exclude`)
-- BYOK (Bring Your Own OpenAI Key), encrypted at rest
-- Security middleware (CSRF header checks, body limits, suspicious scan blocking)
-- Optional Sentry and Discord webhook notifications
+- **ATS report** — score (0–100%), keyword gaps, AI-written summary, and interview questions
+- **Programmatic change plan** — keyword diff used to drive resume improvements
+- **Tailored resume** — LaTeX source, DOCX, and optional PDF
+- **Cover letter** — AI-generated text, DOCX, and optional PDF
+- **Project relevance reasons** — when project controls are provided
 
-## BYOK and Limits
+---
 
-### BYOK
-- Users can save a personal OpenAI API key via `PUT /v1/me/api-key`.
-- Keys are encrypted server-side using AES-256-GCM before storage (`encrypted_openai_key`).
-- During run processing, the worker uses the user's decrypted key when available; otherwise it falls back to the global `OPENAI_API_KEY`.
-- BYOK requires `API_KEY_ENCRYPTION_SECRET` to be set on the server.
+## Architecture at a Glance
 
-### Rate and Usage Limits
-Run creation is guarded by multiple layers:
-- Global IP rate limit: `60/min`
-- Login rate limit: `5/min` per IP
-- Signup rate limit: `3/hour` per IP
-- Resume upload rate limit: `10/min` per IP
-- Run create burst limit: `1/min` per user
-- Run create daily limiter: `10/day` per user (in-memory limiter)
-- Free-tier DB limits for users **without** BYOK:
-  - `3/day` per user
-  - `6/day` per creator IP
-
-## Architecture
-```mermaid
-flowchart LR
-  UI[Next.js Web App] --> API[Go API]
-  API --> DB[(PostgreSQL)]
-  API --> JOBS[(jobs table queue)]
-
-  WORKER[Go Worker] --> JOBS
-  WORKER --> DB
-  WORKER --> OAI[OpenAI]
-  WORKER --> BM25[BM25 + Discipline Profiles]
-
-  WORKER --> ART[run_artifacts_items]
-  WORKER --> REP[run_reports]
+```
+Browser → Next.js Frontend → Go API → PostgreSQL ← Go Worker → OpenAI
+                                    ↖ jobs table ↗
 ```
 
-## Repository Layout
-- `backend/cmd/api`: API server entrypoint
-- `backend/cmd/worker`: worker entrypoint
-- `backend/internal`: core domains (auth, runs, jobs, scoring, artifacts, http API, etc.)
-- `backend/migrations`: SQL migrations + migration runner
-- `backend/web`: Next.js frontend
-- `backend/scripts`: dev/verify/smoke scripts
-- `render.yaml`: Render service definitions
+Three services, one database:
 
-## Local Development
+| Service | Role |
+|---------|------|
+| **Go API** (`cmd/api`) | Auth, resumes, run creation, artifact downloads |
+| **Go Worker** (`cmd/worker`) | BM25 scoring, OpenAI calls, LaTeX/DOCX rendering |
+| **Next.js** (`web/`) | UI, proxies `/api/*` to the Go API |
 
-### Prerequisites
-- Go `1.24+`
-- Node.js `18+`
-- Docker
-- OpenAI API key (global fallback key for local worker)
+The API writes jobs to a PostgreSQL queue and returns immediately. The worker polls the queue and processes runs asynchronously.
 
-### Quick Start (Recommended)
+---
+
+## Technology Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend language | Go 1.24 |
+| Frontend framework | Next.js 14+ (App Router, TypeScript, Tailwind) |
+| Database | PostgreSQL 15+ |
+| Job queue | PostgreSQL (SQL-backed, no external broker) |
+| LLM | OpenAI (gpt-4o-mini by default, configurable) |
+| PDF compilation | Tectonic (optional) |
+| Deployment | Render.com (3-service blueprint in `render.yaml`) |
+
+---
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [docs/user-journey.md](docs/user-journey.md) | End-to-end user flow: landing → upload → results → export |
+| [docs/system-design.md](docs/system-design.md) | Architecture, DB schema, request lifecycle, security, deployment |
+| [docs/scoring.md](docs/scoring.md) | BM25 algorithm, discipline profiles, IDF table, phrase detection |
+| [docs/api-reference.md](docs/api-reference.md) | All HTTP endpoints with request/response details |
+| [docs/local-development.md](docs/local-development.md) | Full local dev setup guide |
+| [backend/README.md](backend/README.md) | Backend directory layout, key packages, how to run/test |
+| [backend/web/README.md](backend/web/README.md) | Frontend pages, components, env vars, how to run |
+
+---
+
+## Quick Start
+
+See [docs/local-development.md](docs/local-development.md) for the full guide.
+
+**Fastest path:**
 ```bash
 cd backend
 cp .env.example .env
-```
-
-Set at least:
-- `DATABASE_URL`
-- `OPENAI_API_KEY`
-
-Optional but recommended for BYOK support:
-- `API_KEY_ENCRYPTION_SECRET`
-
-Then run:
-```bash
+# Set DATABASE_URL and OPENAI_API_KEY in .env
 make dev
 ```
 
-This script starts Postgres, applies migrations, runs API + worker, and starts the web app.
+`make dev` starts Postgres, runs migrations, starts the API + worker, and launches the Next.js dev server.
 
-### Manual Start
-```bash
-cd backend
-cp .env.example .env
+---
 
-docker compose up -d
-go run ./cmd/api
-go run ./cmd/worker
+## Key Capabilities
 
-cd web
-npm install
-npm run dev
+- Email/password auth with HttpOnly session cookies
+- Google OAuth login
+- Resume upload (`.pdf` and `.docx`) with server-side text extraction
+- Profile-aware BM25 scoring across 5 engineering disciplines
+- Discipline auto-detection from resume content
+- Async run queue with retries and configurable timeout
+- BYOK (Bring Your Own OpenAI Key), encrypted at rest with AES-256-GCM
+- PDF compilation via Tectonic (optional)
+- CSRF protection, per-IP and per-user rate limiting, suspicious scan blocking
+- Optional Sentry error monitoring and Discord webhook notifications
+
+### Rate and Usage Limits
+
+| Limit | Value |
+|-------|-------|
+| Global IP rate limit | 60 req/min |
+| Login | 5/min per IP |
+| Signup | 3/hour per IP |
+| Resume upload | 10/min per IP |
+| Run creation (burst) | 1/min per user |
+| Run creation (daily) | 10/day per user |
+| Free-tier (no BYOK) | 3/day per user, 6/day per creator IP |
+
+---
+
+## Repository Layout
+
 ```
+/
+├── README.md              This file
+├── docs/                  Topic-specific documentation
+│   ├── user-journey.md
+│   ├── system-design.md
+│   ├── scoring.md
+│   ├── api-reference.md
+│   └── local-development.md
+├── backend/               Go backend + Next.js frontend
+│   ├── cmd/               Entry points (api, worker, migrate)
+│   ├── internal/          All Go library code
+│   ├── migrations/        SQL migrations
+│   ├── web/               Next.js app
+│   ├── scripts/           Dev/CI scripts
+│   └── docs/              Internal backend reference docs
+└── render.yaml            Render.com deployment blueprint
+```
+
+---
 
 ## Configuration
-Important environment variables:
+
+Critical environment variables (set in `backend/.env`):
 
 | Variable | Required | Description |
-|---|---|---|
+|----------|----------|-------------|
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `OPENAI_API_KEY` | Yes (for global fallback) | Global OpenAI key used when user has no BYOK key |
-| `OPENAI_MODEL` | No | OpenAI model name (default `gpt-4o-mini`) |
-| `API_KEY_ENCRYPTION_SECRET` | No* | Enables BYOK key storage/decryption (`*` required for BYOK) |
-| `HTTP_ADDR` | No | API listen address (default `:8080`) |
-| `FRONTEND_ORIGIN` | No | Allowed CORS origins (comma-separated) |
-| `WORKER_ID` | No | Worker identifier |
-| `WORKER_JOB_TIMEOUT` | No | End-to-end timeout per job (default `15m`) |
-| `DISCIPLINE_MODE` | No | `off`, `observe`, or `enforce` (default `enforce`) |
-| `RESUME_PDF_ENABLED` | No | Set `1` to enable PDF compile attempts |
-| `TECTONIC_BIN` | No | Path to `tectonic` binary |
-| `COOKIE_SECURE` / `COOKIE_SAMESITE` / `COOKIE_DOMAIN` | No | Session cookie behavior |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URL` | No | Google OAuth |
-| `EMAIL_PROVIDER` / `EMAIL_API_KEY` / `EMAIL_FROM` | No | Transactional email provider |
-| `SENTRY_DSN` | No | Error monitoring |
-| `DISCORD_WEBHOOK_URL` | No | Event notifications |
+| `OPENAI_API_KEY` | Yes | Global OpenAI key (fallback when user has no BYOK key) |
+| `API_KEY_ENCRYPTION_SECRET` | No* | Enables BYOK — AES-256-GCM encryption secret |
+| `OPENAI_MODEL` | No | Model name (default `gpt-4o-mini`) |
+| `RESUME_PDF_ENABLED` | No | Set `1` to enable PDF compilation via Tectonic |
 
-## API Overview (`/v1`)
+Full variable reference: [docs/system-design.md#environment-variables](docs/system-design.md#environment-variables)
 
-### Public
-- `GET /`
-- `GET /health`
-- `POST /auth/signup`
-- `POST /auth/login`
-- `POST /auth/logout`
-- `GET /auth/google/start`
-- `GET /auth/google/callback`
-- `GET /auth/verify`
-- `POST /auth/forgot-password`
-- `POST /auth/reset-password`
-
-### Authenticated
-- `GET /me`
-- `PUT /me/password`
-- `DELETE /me`
-- `PUT /me/api-key`
-- `DELETE /me/api-key`
-- `POST /me/onboarding-seen`
-- `POST /auth/resend-verification`
-
-### Resumes
-- `POST /resumes`
-- `POST /resumes/upload`
-- `GET /resumes`
-- `GET /resumes/{resumeID}`
-
-### Runs
-- `POST /runs`
-- `GET /runs`
-- `GET /runs/{runID}`
-- `GET /runs/{runID}/report`
-- `POST /disciplines/detect`
-
-### Artifact Downloads
-- `GET /runs/{runID}/artifacts/resume-latex`
-- `GET /runs/{runID}/artifacts/resume-pdf`
-- `GET /runs/{runID}/artifacts/resume-docx`
-- `GET /runs/{runID}/artifacts/cover-letter`
-- `GET /runs/{runID}/artifacts/cover-letter-pdf`
-- `GET /runs/{runID}/artifacts/cover-letter-docx`
-- `GET /runs/{runID}/artifacts/project-reasons`
-
-## Testing and Verification
-From `backend`:
-```bash
-make test
-make smoke
-make verify
-```
-
-Notes:
-- `make smoke` expects API/worker and required env vars.
-- `make verify` runs formatting checks, tests, integration boot, and smoke flow.
+---
 
 ## Deployment
-The repository includes a Render blueprint in [`render.yaml`](render.yaml):
-- `resume-tailor-api` (Go web service)
-- `resume-tailor-worker` (Go worker)
-- `resume-tailor-web` (Next.js web service)
 
-## Additional Documentation
-- Backend local dev: `backend/docs/local-dev.md`
-- Backend testing notes: `backend/docs/testing.md`
-- BM25 details: `backend/docs/bm25.md`
-- Internal reference docs: `backend/docs/backend-reference/`
+The `render.yaml` blueprint defines:
+- `resume-tailor-api` — Go web service (free plan)
+- `resume-tailor-worker` — Go worker (starter plan, needs persistent CPU for Tectonic)
+- `resume-tailor-web` — Next.js web service (free plan)
+
+See [docs/system-design.md#deployment](docs/system-design.md#deployment-rendercom) for details.
+
+---
+
+## Testing
+
+From `backend/`:
+
+```bash
+make test     # go test ./...
+make smoke    # e2e smoke flow (API + worker must be running)
+make verify   # full check: fmt + tests + build + smoke
+```
+
+---
+
+## Additional Internal Docs
+
+- `backend/docs/discipline-profiles.md` — profile governance and update process
+- `backend/docs/testing.md` — testing strategy notes
+- `backend/docs/bm25.md` — legacy BM25 signal reference
