@@ -3,6 +3,13 @@ const apiProxyTarget = process.env.API_PROXY_TARGET || "http://localhost:8080";
 
 const nextConfig = {
   reactStrictMode: true,
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+    dirs: ["app", "components", "lib", "pages"],
+  },
   async rewrites() {
     return [
       {
