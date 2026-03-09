@@ -1017,9 +1017,6 @@ export default function ResultPage() {
                               <h3 className="font-grotesk text-3xl font-semibold text-[var(--rt-ink-900)]">
                                 Match quality overview
                               </h3>
-                              <p className="font-serif-display mt-2 text-lg leading-relaxed text-[var(--rt-ink-700)]">
-                                You match core technical requirements. Biggest gains now come from measurable impact language and stronger ownership verbs.
-                              </p>
                             </div>
                           </div>
                         </article>
@@ -1154,35 +1151,6 @@ export default function ResultPage() {
                         </section>
                       ) : null}
 
-                      {atsReport.interview_questions.length > 0 ? (
-                        <section className="rounded-[1.2rem] border border-[var(--rt-stroke)] bg-[rgba(255,255,255,0.62)] p-5">
-                          <p className="rt-label">Interview prep prompts</p>
-                          <div className="mt-3 space-y-3">
-                            {atsReport.interview_questions.slice(0, 3).map((item) => (
-                              <article
-                                key={item.question}
-                                className="rounded-[1rem] border border-[rgba(56,64,82,0.16)] bg-[rgba(245,248,253,0.65)] p-3"
-                              >
-                                <h4 className="font-grotesk text-xl font-semibold text-[var(--rt-ink-900)]">
-                                  {item.question}
-                                </h4>
-                                {item.answer_star.length > 0 ? (
-                                  <ul className="mt-2 space-y-1">
-                                    {item.answer_star.map((point, index) => (
-                                      <li
-                                        key={`${item.question}-star-${index}`}
-                                        className="text-sm text-[var(--rt-ink-700)]"
-                                      >
-                                        • {point}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                ) : null}
-                              </article>
-                            ))}
-                          </div>
-                        </section>
-                      ) : null}
 
                       {atsReport.bm25_signals ? (
                         <section className="rounded-[1.2rem] border border-[var(--rt-stroke)] bg-[rgba(255,255,255,0.62)] p-5">
