@@ -84,7 +84,6 @@ export default function EditorialNav({ mode }: EditorialNavProps) {
             <p className="truncate font-grotesk text-xl font-semibold leading-none text-[var(--rt-ink-900)]">
               Resume Tailor
             </p>
-            <p className="rt-label mt-1 hidden sm:block">built by a person, for people</p>
           </div>
         </div>
 
