@@ -1,14 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "/api";
 const REPORT_PROBLEM_MAILTO =
   "mailto:rayanmalki54@gmail.com?subject=Resume%20Tailor%20-%20Problem%20Report";
-
-type NavId = "home" | "dashboard";
 
 type UserData = {
   email: string;
@@ -18,14 +16,9 @@ type UserData = {
 
 type EditorialNavProps = {
   mode: "public" | "private";
-  active?: NavId;
 };
 
-export default function EditorialNav({
-  mode,
-  active,
-}: EditorialNavProps) {
-  const pathname = usePathname();
+export default function EditorialNav({ mode }: EditorialNavProps) {
   const router = useRouter();
 
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -70,16 +63,6 @@ export default function EditorialNav({
     router.push("/login");
   };
 
-  const inferredActive: NavId = pathname === "/" ? "home" : "dashboard";
-  const activeTab = active ?? inferredActive;
-
-  const navItems: Array<{ id: NavId; label: string; href: string }> = [
-    { id: "home", label: "Home", href: "/" },
-    { id: "dashboard", label: "Dashboard", href: "/dashboard" },
-  ];
-
-  const visibleNavItems = mode === "public" ? [] : navItems;
-
   const initials = me
     ? (me.displayName || me.email || "?")[0].toUpperCase()
     : "?";
@@ -105,19 +88,6 @@ export default function EditorialNav({
           </div>
         </div>
 
-        <div className="hidden items-center gap-2 md:flex">
-          {visibleNavItems.map((item) => (
-            <Link
-              key={item.id}
-              href={item.href}
-              aria-current={activeTab === item.id ? "page" : undefined}
-              className="rt-link-pill px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
-            >
-              {item.label}
-            </Link>
-          ))}
-        </div>
-
         {mode === "public" ? (
           <Link
             href="/login"
@@ -128,11 +98,11 @@ export default function EditorialNav({
         ) : (
           <div className="hidden items-center gap-2 md:flex">
             <button
-              onClick={() => router.push("/resume")}
+              onClick={() => router.push("/dashboard")}
               className="rt-btn-primary px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
-              aria-label="Start a new tailoring run"
+              aria-label="Go to dashboard"
             >
-              New run
+              Dashboard
             </button>
 
             <div className="relative" ref={dropdownRef}>
@@ -208,17 +178,6 @@ export default function EditorialNav({
       {mobileOpen ? (
         <div className="mt-3 border-t border-[var(--rt-stroke)] pt-3 md:hidden">
           <div className="grid gap-2">
-            {visibleNavItems.map((item) => (
-              <Link
-                key={item.id}
-                href={item.href}
-                onClick={() => setMobileOpen(false)}
-                aria-current={activeTab === item.id ? "page" : undefined}
-                className="rt-link-pill px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em]"
-              >
-                {item.label}
-              </Link>
-            ))}
             {mode === "public" ? (
               <Link
                 href="/login"
@@ -232,11 +191,11 @@ export default function EditorialNav({
                 <button
                   onClick={() => {
                     setMobileOpen(false);
-                    router.push("/resume");
+                    router.push("/dashboard");
                   }}
                   className="rt-btn-primary px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em]"
                 >
-                  New run
+                  Dashboard
                 </button>
                 <button
                   onClick={() => {
