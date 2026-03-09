@@ -3,7 +3,7 @@
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import TopBar from "../components/TopBar";
+import EditorialNav from "../components/EditorialNav";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "/api";
 
@@ -20,11 +20,11 @@ function ResetPasswordForm() {
 
   if (!token) {
     return (
-      <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-4 py-3">
-        <p className="text-sm text-rose-300">Invalid or missing reset token.</p>
+      <div className="mt-6 rounded-lg border border-[rgba(190,76,47,0.2)] bg-[rgba(255,236,229,0.85)] px-4 py-3">
+        <p className="text-sm text-[var(--rt-accent-strong)]">Invalid or missing reset token.</p>
         <Link
           href="/forgot-password"
-          className="mt-3 inline-block text-sm font-medium text-ember-300 transition hover:text-ember-200"
+          className="mt-3 inline-block text-sm font-medium text-[var(--rt-accent)] transition hover:text-[var(--rt-accent-strong)]"
         >
           Request a new reset link
         </Link>
@@ -75,8 +75,8 @@ function ResetPasswordForm() {
 
   if (success) {
     return (
-      <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
-        <p className="text-sm text-emerald-300">
+      <div className="mt-6 rounded-lg border border-[rgba(41,137,109,0.25)] bg-[rgba(229,246,239,0.78)] px-4 py-3">
+        <p className="text-sm text-[rgba(28,112,87,0.92)]">
           Password reset successfully! Redirecting to login&hellip;
         </p>
       </div>
@@ -86,7 +86,7 @@ function ResetPasswordForm() {
   return (
     <form onSubmit={handleSubmit} className="mt-6 space-y-4">
       <div>
-        <label htmlFor="password" className="text-sm font-medium text-slate-200">
+        <label htmlFor="password" className="text-sm font-medium text-[var(--rt-ink-700)]">
           New password
         </label>
         <input
@@ -94,14 +94,14 @@ function ResetPasswordForm() {
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="mt-1 w-full rounded-xl border border-white/10 bg-ink-950 px-3 py-2.5 text-slate-100 placeholder:text-slate-500 focus:border-ember-500/60 focus:outline-none focus:ring-1 focus:ring-ember-500/40"
+          className="mt-1 w-full rounded-xl border border-[rgba(67,63,52,0.25)] bg-white/70 px-3 py-2.5 text-[var(--rt-ink-900)] placeholder:text-[var(--rt-ink-500)] focus:border-[var(--rt-accent)] focus:outline-none focus:ring-1 focus:ring-[rgba(190,76,47,0.3)]"
           placeholder="At least 8 characters"
           required
           minLength={8}
         />
       </div>
       <div>
-        <label htmlFor="confirm" className="text-sm font-medium text-slate-200">
+        <label htmlFor="confirm" className="text-sm font-medium text-[var(--rt-ink-700)]">
           Confirm new password
         </label>
         <input
@@ -109,7 +109,7 @@ function ResetPasswordForm() {
           type="password"
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
-          className="mt-1 w-full rounded-xl border border-white/10 bg-ink-950 px-3 py-2.5 text-slate-100 placeholder:text-slate-500 focus:border-ember-500/60 focus:outline-none focus:ring-1 focus:ring-ember-500/40"
+          className="mt-1 w-full rounded-xl border border-[rgba(67,63,52,0.25)] bg-white/70 px-3 py-2.5 text-[var(--rt-ink-900)] placeholder:text-[var(--rt-ink-500)] focus:border-[var(--rt-accent)] focus:outline-none focus:ring-1 focus:ring-[rgba(190,76,47,0.3)]"
           placeholder="Repeat your new password"
           required
           minLength={8}
@@ -117,24 +117,22 @@ function ResetPasswordForm() {
       </div>
 
       {error ? (
-        <div role="alert" className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2">
-          <p className="text-sm text-rose-300">{error}</p>
+        <div role="alert" className="rounded-lg border border-[rgba(190,76,47,0.2)] bg-[rgba(255,236,229,0.85)] px-3 py-2">
+          <p className="text-sm text-[var(--rt-accent-strong)]">{error}</p>
         </div>
       ) : null}
 
       <button
         type="submit"
         disabled={loading}
-        className="flex w-full items-center justify-center gap-2 rounded-full bg-ember-500 px-4 py-2.5 text-sm font-semibold text-ink-950 shadow-glow transition hover:-translate-y-0.5 hover:bg-ember-400 disabled:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-900"
+        className="rt-btn-primary flex w-full items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold disabled:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--rt-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
       >
         {loading ? (
           <>
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-ink-950/30 border-t-ink-950" />
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
             Resetting&hellip;
           </>
-        ) : (
-          "Reset password"
-        )}
+        ) : "Reset password"}
       </button>
     </form>
   );
@@ -142,19 +140,24 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <div className="min-h-screen bg-ink-950 text-slate-100">
-      <TopBar />
-      <main className="mx-auto flex w-full max-w-5xl flex-1 items-center justify-center px-4 py-10 sm:px-6 sm:py-16">
-        <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-ink-900/70 p-6 shadow-panel backdrop-blur sm:p-8">
-          <h1 className="text-xl font-semibold text-white sm:text-2xl">Choose a new password</h1>
-          <p className="mt-2 text-sm text-slate-400">
-            Enter your new password below.
-          </p>
-          <Suspense fallback={<div className="mt-6 h-40 animate-pulse rounded-lg bg-white/5" />}>
-            <ResetPasswordForm />
-          </Suspense>
-        </div>
-      </main>
+    <div className="rt-canvas">
+      <div className="rt-shell">
+        <EditorialNav mode="public" />
+        <main className="flex min-h-[calc(100vh-5rem)] items-center justify-center py-10">
+          <div className="rt-panel w-full max-w-md p-6 sm:p-8">
+            <p className="rt-label">Account</p>
+            <h1 className="mt-2 font-grotesk text-3xl font-semibold text-[var(--rt-ink-900)]">
+              Choose a new password
+            </h1>
+            <p className="font-serif-display mt-2 text-lg text-[var(--rt-ink-700)]">
+              Enter your new password below.
+            </p>
+            <Suspense fallback={<div className="mt-6 h-40 animate-pulse rounded-lg bg-[rgba(81,73,62,0.08)]" />}>
+              <ResetPasswordForm />
+            </Suspense>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
