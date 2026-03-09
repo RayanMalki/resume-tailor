@@ -77,6 +77,8 @@ select {
 }
 
 .rt-topbar {
+  position: relative;
+  z-index: 40;
   border: 1px solid var(--rt-stroke);
   border-radius: calc(var(--rt-radius-xl) + 0.15rem);
   background: rgba(255, 255, 255, 0.7);
