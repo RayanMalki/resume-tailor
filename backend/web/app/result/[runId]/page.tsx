@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import TopBar from "../../components/TopBar";
+import EditorialNav from "../../components/EditorialNav";
 import { useToast } from "../../components/Toast";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "/api";
@@ -70,7 +70,11 @@ const disciplineLabels: Record<string, string> = {
 /* ------------------------------------------------------------------ */
 
 function SkeletonLine({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded-lg bg-white/5 ${className}`} />;
+  return (
+    <div
+      className={`animate-pulse rounded-lg bg-[rgba(81,73,62,0.12)] ${className}`}
+    />
+  );
 }
 
 function SkeletonBlock() {
@@ -86,9 +90,11 @@ function SkeletonBlock() {
 
 function PDFSkeleton() {
   return (
-    <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-white/10 bg-ink-950 p-10">
-      <div className="h-10 w-10 animate-spin rounded-full border-2 border-ember-500/30 border-t-ember-500" />
-      <p className="text-sm text-slate-400">Loading resume preview&hellip;</p>
+    <div className="flex flex-col items-center justify-center gap-4 rounded-[1.2rem] border border-[var(--rt-stroke)] bg-[rgba(255,255,255,0.58)] p-10">
+      <div className="h-10 w-10 animate-spin rounded-full border-2 border-[rgba(46,102,210,0.2)] border-t-[var(--rt-blue)]" />
+      <p className="text-sm text-[var(--rt-ink-700)]">
+        Loading resume preview&hellip;
+      </p>
     </div>
   );
 }
@@ -104,10 +110,10 @@ function ScoreRing({ score }: { score: number }) {
   const dashOffset = circumference - (pct / 100) * circumference;
   const color =
     pct >= 75
-      ? "text-emerald-400"
+      ? "text-[var(--rt-green)]"
       : pct >= 50
-        ? "text-amber-400"
-        : "text-rose-400";
+        ? "text-[var(--rt-blue)]"
+        : "text-[var(--rt-accent-strong)]";
 
   return (
     <div className="relative inline-flex items-center justify-center">
@@ -125,7 +131,7 @@ function ScoreRing({ score }: { score: number }) {
           fill="none"
           stroke="currentColor"
           strokeWidth="6"
-          className="text-white/10"
+          className="rt-score-track"
         />
         <circle
           cx="50"
@@ -846,426 +852,447 @@ export default function ResultPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-ink-950 text-slate-100">
-      <TopBar showLogout />
-      <main className="mx-auto flex w-full max-w-5xl flex-1 items-start justify-center px-4 py-8 sm:px-6 sm:py-16">
-        <div className="w-full max-w-3xl rounded-[28px] border border-white/10 bg-ink-900/70 p-5 shadow-panel backdrop-blur sm:p-8">
-          {/* Header */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-xl font-semibold text-white sm:text-2xl">
-              Your tailored resume
-            </h1>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={handleGoToResume}
-                className="rounded-full border border-white/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-200 transition hover:border-ember-400/60 hover:text-ember-200 sm:px-4 sm:py-1.5 sm:tracking-[0.2em]"
-                aria-label="Upload a new resume"
-              >
-                New Resume
-              </button>
-              <button
-                onClick={handleGoToJob}
-                className="rounded-full border border-white/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-200 transition hover:border-ember-400/60 hover:text-ember-200 sm:px-4 sm:py-1.5 sm:tracking-[0.2em]"
-                aria-label="Upload a new job listing"
-              >
-                New Job
-              </button>
+    <div className="rt-canvas">
+      <div className="rt-shell">
+        <EditorialNav mode="private" />
+        <main className="mt-4 space-y-4 sm:mt-6 sm:space-y-6">
+          <section className="rt-panel rt-fade-up p-5 sm:p-7">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="rt-label">ATS Snapshot</p>
+                <h1 className="mt-2 font-grotesk text-4xl font-semibold text-[var(--rt-ink-900)] sm:text-5xl">
+                  Strong base with room to sharpen impact language
+                </h1>
+                <p className="font-serif-display mt-2 text-xl text-[var(--rt-ink-700)]">
+                  {loadingMessage}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={handleGoToResume}
+                  className="rt-btn-secondary px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em]"
+                  aria-label="Upload a new resume"
+                >
+                  New resume
+                </button>
+                <button
+                  onClick={handleGoToJob}
+                  className="rt-btn-secondary px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em]"
+                  aria-label="Upload a new job listing"
+                >
+                  New job
+                </button>
+              </div>
             </div>
-          </div>
-          <p className="mt-2 text-sm text-slate-400">{loadingMessage}</p>
 
-          {/* Loading state */}
-          {!latex ? (
-            <div className="mt-6">
-              <div
-                className="h-2 w-full overflow-hidden rounded-full bg-ink-950"
-                role="progressbar"
-                aria-valuenow={progress}
-                aria-valuemin={0}
-                aria-valuemax={100}
-              >
+            {!latex ? (
+              <div className="mt-6 rounded-[1.2rem] border border-[var(--rt-stroke)] bg-[rgba(255,255,255,0.58)] p-4 sm:p-5">
                 <div
-                  className="h-full rounded-full bg-ember-500 transition-all"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-              <p className="mt-2 text-xs text-slate-500">{progressStage}</p>
-              {error ? (
-                <div className="mt-4">
-                  <p className="text-sm text-rose-300">{error}</p>
-                  <button
-                    onClick={() => window.location.reload()}
-                    className="mt-2 rounded-full border border-white/10 px-4 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-ember-400/60"
-                  >
-                    Retry
-                  </button>
+                  className="rt-progress-track"
+                  role="progressbar"
+                  aria-valuenow={progress}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
+                  <div
+                    className="rt-progress-fill"
+                    style={{ width: `${progress}%` }}
+                  />
                 </div>
-              ) : (
-                <div className="mt-6">
-                  <SkeletonBlock />
-                </div>
-              )}
-            </div>
-          ) : (
-            <>
-              {/* Tab navigation */}
-              <div
-                className="mt-6 flex gap-1 rounded-xl border border-white/10 bg-ink-950/60 p-1"
-                role="tablist"
-                aria-label="Result tabs"
-              >
-                {tabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    role="tab"
-                    aria-selected={activeTab === tab.id}
-                    aria-controls={`panel-${tab.id}`}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.15em] transition sm:text-sm ${
-                      activeTab === tab.id
-                        ? "bg-ember-500 text-ink-950 shadow-glow"
-                        : "text-slate-400 hover:text-slate-200"
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
+                <p className="mt-2 text-sm text-[var(--rt-ink-700)]">
+                  {progressStage}
+                </p>
+                {error ? (
+                  <div className="mt-3">
+                    <p className="text-sm text-[var(--rt-accent-strong)]">
+                      {error}
+                    </p>
+                    <button
+                      onClick={() => window.location.reload()}
+                      className="rt-btn-secondary mt-2 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em]"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-4">
+                    <SkeletonBlock />
+                  </div>
+                )}
               </div>
+            ) : (
+              <>
+                <div
+                  className="mt-6 flex flex-wrap gap-2 rounded-[1rem] border border-[var(--rt-stroke)] bg-[rgba(255,255,255,0.52)] p-1"
+                  role="tablist"
+                  aria-label="Result tabs"
+                >
+                  {tabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      id={`tab-${tab.id}`}
+                      role="tab"
+                      aria-selected={activeTab === tab.id}
+                      aria-controls={`panel-${tab.id}`}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`flex-1 rounded-[0.8rem] px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] transition sm:text-sm ${
+                        activeTab === tab.id
+                          ? "bg-[var(--rt-accent)] text-[#fff8f3]"
+                          : "text-[var(--rt-ink-500)] hover:text-[var(--rt-ink-900)]"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
 
-              {/* Action buttons — only shown on PDF Preview tab */}
-              {activeTab === "preview" && (
-                <>
+                {activeTab === "preview" ? (
                   <div className="mt-4 flex flex-wrap items-center gap-2">
                     <button
                       onClick={handleDownloadPDF}
                       disabled={pdfLoading}
-                      className="rounded-full border border-ember-500/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-ember-200 transition hover:border-ember-400 hover:text-white disabled:opacity-50 sm:tracking-[0.2em]"
+                      className="rt-btn-primary px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] disabled:cursor-not-allowed disabled:opacity-65"
                       aria-label="Download resume as PDF"
                     >
-                      {pdfLoading ? "Preparing\u2026" : "Download PDF"}
+                      {pdfLoading ? "Preparing..." : "Download PDF"}
                     </button>
                     <button
                       onClick={handleDownloadDOCX}
-                      className="rounded-full border border-emerald-500/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-emerald-200 transition hover:border-emerald-400 hover:text-white sm:tracking-[0.2em]"
+                      className="rt-btn-secondary px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em]"
                       aria-label="Download resume as DOCX"
                     >
                       Download DOCX
                     </button>
                     <button
                       onClick={handleCopy}
-                      className="rounded-full border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-200 transition hover:border-ember-400 hover:text-ember-200 sm:tracking-[0.2em]"
+                      className="rt-btn-secondary px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em]"
                       aria-label="Copy LaTeX source to clipboard"
                     >
                       Copy LaTeX
                     </button>
                   </div>
-                  {pdfError && (
-                    <p className="mt-2 text-xs text-rose-300">{pdfError}</p>
+                ) : null}
+
+                {pdfError && activeTab === "preview" ? (
+                  <p className="mt-2 text-xs text-[var(--rt-accent-strong)]">
+                    {pdfError}
+                  </p>
+                ) : null}
+
+                <div
+                  id="panel-preview"
+                  role="tabpanel"
+                  aria-labelledby="tab-preview"
+                  className={activeTab === "preview" ? "mt-4" : "hidden"}
+                >
+                  {pdfLoading || !pdfUrl ? (
+                    <PDFSkeleton />
+                  ) : (
+                    <iframe
+                      src={pdfUrl}
+                      title="Resume preview"
+                      className="h-[65vh] min-h-[520px] w-full rounded-[1.2rem] border border-[var(--rt-stroke)] bg-white"
+                    />
                   )}
-                </>
-              )}
+                </div>
 
-              {/* ── PDF Preview Tab ──────────────────────────── */}
-              <div
-                id="panel-preview"
-                role="tabpanel"
-                aria-labelledby="tab-preview"
-                className={activeTab === "preview" ? "mt-4" : "hidden"}
-              >
-                {pdfLoading || !pdfUrl ? (
-                  <PDFSkeleton />
-                ) : (
-                  <iframe
-                    src={pdfUrl}
-                    title="Resume preview"
-                    className="h-[600px] w-full rounded-2xl border border-white/10 bg-white sm:h-[750px]"
-                  />
-                )}
-              </div>
-
-              {/* ── ATS Report Tab ───────────────────────────── */}
-              <div
-                id="panel-report"
-                role="tabpanel"
-                aria-labelledby="tab-report"
-                className={activeTab === "report" ? "mt-4" : "hidden"}
-              >
-                {reportLoading || !atsReport ? (
-                  <div className="space-y-4 rounded-2xl border border-white/10 bg-ink-950/60 p-6">
-                    <SkeletonBlock />
-                  </div>
-                ) : (
-                  <div className="space-y-6 rounded-2xl border border-white/10 bg-ink-950/60 p-6">
-                    {/* Score */}
-                    <div className="flex flex-col items-center gap-3 sm:flex-row sm:gap-6">
-                      <ScoreRing score={atsReport.score} />
-                      <div>
-                        <h3 className="text-lg font-semibold text-white">
-                          ATS Compatibility Score
-                        </h3>
-                        <p className="mt-1 text-sm text-slate-400">
-                          Based on BM25 keyword analysis and resume-to-job
-                          alignment.
-                        </p>
-                      </div>
+                <div
+                  id="panel-report"
+                  role="tabpanel"
+                  aria-labelledby="tab-report"
+                  className={activeTab === "report" ? "mt-4" : "hidden"}
+                >
+                  {reportLoading || !atsReport ? (
+                    <div className="rounded-[1.2rem] border border-[var(--rt-stroke)] bg-[rgba(255,255,255,0.58)] p-5">
+                      <SkeletonBlock />
                     </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <section className="grid gap-4 lg:grid-cols-[1.15fr_1fr]">
+                        <article className="rounded-[1.2rem] border border-[var(--rt-stroke)] bg-[rgba(255,255,255,0.66)] p-5">
+                          <p className="rt-label">ATS Score</p>
+                          <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row sm:items-center">
+                            <ScoreRing score={atsReport.score} />
+                            <div>
+                              <h3 className="font-grotesk text-3xl font-semibold text-[var(--rt-ink-900)]">
+                                Match quality overview
+                              </h3>
+                              <p className="font-serif-display mt-2 text-lg leading-relaxed text-[var(--rt-ink-700)]">
+                                You match core technical requirements. Biggest gains now come from measurable impact language and stronger ownership verbs.
+                              </p>
+                            </div>
+                          </div>
+                        </article>
 
-                    {(atsReport.discipline || atsReport.profile_version) && (
-                      <div className="rounded-xl border border-white/10 bg-ink-900/50 p-4">
-                        <h4 className="text-sm font-semibold text-slate-200">
-                          Discipline context
-                        </h4>
-                        {atsReport.discipline ? (
-                          <p className="mt-2 text-sm text-slate-200">
-                            {disciplineLabels[atsReport.discipline] ||
-                              atsReport.discipline}
-                          </p>
-                        ) : null}
-                        <p className="mt-1 text-xs text-slate-400">
-                          Confidence:{" "}
-                          {Math.round(
-                            (atsReport.discipline_confidence ?? 0) * 100,
-                          )}
-                          % • Source: {atsReport.discipline_source || "auto"}
-                          {atsReport.low_confidence ? " • low confidence" : ""}
-                          {atsReport.scoring_discipline &&
-                          atsReport.scoring_discipline !== atsReport.discipline
-                            ? ` • scoring profile: ${disciplineLabels[atsReport.scoring_discipline] || atsReport.scoring_discipline}`
-                            : ""}
-                        </p>
-                        {atsReport.profile_version ? (
-                          <p className="mt-1 text-[11px] text-slate-500">
-                            Profile version: {atsReport.profile_version}
-                          </p>
-                        ) : null}
-                        {Array.isArray(atsReport.discipline_evidence) &&
-                        atsReport.discipline_evidence.length > 0 ? (
-                          <div className="mt-3">
-                            <p className="text-xs font-medium text-slate-300">
-                              Classification evidence
+                        <article className="rounded-[1.2rem] border border-[var(--rt-stroke)] bg-[rgba(255,255,255,0.66)] p-5">
+                          <p className="rt-label">Coverage by bucket</p>
+                          {atsReport.category_coverage &&
+                          Object.keys(atsReport.category_coverage).length > 0 ? (
+                            <div className="mt-4 space-y-3">
+                              {Object.entries(atsReport.category_coverage)
+                                .sort(([a], [b]) => a.localeCompare(b))
+                                .map(([bucket, value]) => {
+                                  const pct = Math.round(
+                                    Math.max(0, Math.min(1, value)) * 100,
+                                  );
+                                  return (
+                                    <div key={`coverage-${bucket}`}>
+                                      <div className="mb-1 flex items-center justify-between gap-2 text-sm">
+                                        <span className="font-grotesk text-xl font-semibold text-[var(--rt-ink-900)]">
+                                          {bucketOrder.find(
+                                            (item) => item.key === bucket,
+                                          )?.label || bucket}
+                                        </span>
+                                        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--rt-ink-500)]">
+                                          {pct}%
+                                        </span>
+                                      </div>
+                                      <div className="rt-progress-track">
+                                        <div
+                                          className="rt-progress-fill"
+                                          style={{ width: `${pct}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          ) : (
+                            <p className="mt-3 text-sm text-[var(--rt-ink-700)]">
+                              Coverage data will appear once scoring buckets are available.
                             </p>
-                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          )}
+                        </article>
+                      </section>
+
+                      {(atsReport.discipline || atsReport.profile_version) && (
+                        <section className="rounded-[1.2rem] border border-[var(--rt-stroke)] bg-[rgba(255,255,255,0.62)] p-5">
+                          <p className="rt-label">Discipline Context</p>
+                          <p className="mt-2 font-grotesk text-2xl font-semibold text-[var(--rt-ink-900)]">
+                            {atsReport.discipline
+                              ? disciplineLabels[atsReport.discipline] ||
+                                atsReport.discipline
+                              : "Auto-detected profile"}
+                          </p>
+                          <p className="mt-2 text-sm text-[var(--rt-ink-700)]">
+                            Confidence:{" "}
+                            {Math.round(
+                              (atsReport.discipline_confidence ?? 0) * 100,
+                            )}
+                            % • Source: {atsReport.discipline_source || "auto"}
+                            {atsReport.low_confidence ? " • low confidence" : ""}
+                            {atsReport.scoring_discipline &&
+                            atsReport.scoring_discipline !== atsReport.discipline
+                              ? ` • scoring profile: ${disciplineLabels[atsReport.scoring_discipline] || atsReport.scoring_discipline}`
+                              : ""}
+                          </p>
+                          {atsReport.profile_version ? (
+                            <p className="mt-1 text-xs text-[var(--rt-ink-500)]">
+                              Profile version: {atsReport.profile_version}
+                            </p>
+                          ) : null}
+                          {Array.isArray(atsReport.discipline_evidence) &&
+                          atsReport.discipline_evidence.length > 0 ? (
+                            <div className="mt-3 flex flex-wrap gap-2">
                               {atsReport.discipline_evidence
                                 .slice(0, 8)
                                 .map((item) => (
                                   <span
                                     key={`discipline-evidence-${item.term}`}
-                                    className="rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1 text-xs text-cyan-200"
+                                    className="rounded-full border border-[rgba(50,97,187,0.24)] bg-[rgba(216,228,247,0.72)] px-2.5 py-1 text-xs text-[rgba(34,74,148,0.92)]"
                                   >
                                     {item.term}
                                   </span>
                                 ))}
                             </div>
-                          </div>
-                        ) : null}
-                      </div>
-                    )}
-
-                    {atsReport.category_coverage &&
-                      Object.keys(atsReport.category_coverage).length > 0 && (
-                        <div className="rounded-xl border border-white/10 bg-ink-900/50 p-4">
-                          <h4 className="text-sm font-semibold text-slate-200">
-                            Bucket coverage by discipline
-                          </h4>
-                          <div className="mt-3 space-y-2">
-                            {Object.entries(atsReport.category_coverage)
-                              .sort(([a], [b]) => a.localeCompare(b))
-                              .map(([bucket, value]) => (
-                                <div
-                                  key={`coverage-${bucket}`}
-                                  className="space-y-1"
-                                >
-                                  <div className="flex items-center justify-between gap-2 text-xs text-slate-300">
-                                    <span>
-                                      {bucketOrder.find(
-                                        (item) => item.key === bucket,
-                                      )?.label || bucket}
-                                    </span>
-                                    <span>
-                                      {Math.round(
-                                        Math.max(0, Math.min(1, value)) * 100,
-                                      )}
-                                      %
-                                    </span>
-                                  </div>
-                                  <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
-                                    <div
-                                      className="h-full rounded-full bg-emerald-500/60"
-                                      style={{
-                                        width: `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`,
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-                              ))}
-                          </div>
-                        </div>
+                          ) : null}
+                        </section>
                       )}
 
-                    {/* Change Summary */}
-                    {atsReport.summary && (
-                      <div className="rounded-xl border border-white/10 bg-ink-900/50 p-4">
-                        <h4 className="text-sm font-semibold text-slate-200">
-                          What changed
-                        </h4>
-                        <p className="mt-2 text-sm leading-relaxed text-slate-300">
-                          {atsReport.summary}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Notes */}
-                    {atsReport.notes.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-semibold text-slate-200">
-                          Analysis Notes
-                        </h4>
-                        <ul className="mt-2 space-y-2">
-                          {atsReport.notes.map((note, i) => (
-                            <li
-                              key={i}
-                              className="flex items-start gap-2 text-sm text-slate-300"
-                            >
-                              <span className="mt-1.5 inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full bg-ember-400" />
-                              {note}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* Change plan */}
-                    {atsReport.change_plan.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-semibold text-slate-200">
-                          Change Plan
-                        </h4>
-                        <ul className="mt-2 space-y-2">
-                          {atsReport.change_plan.map((change, i) => (
-                            <li
-                              key={i}
-                              className="flex items-start gap-2 text-sm text-slate-300"
-                            >
-                              <span className="mt-1 flex-shrink-0 text-ember-400">
-                                &#10003;
-                              </span>
-                              {change}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* BM25 Keyword Signals */}
-                    {atsReport.bm25_signals && (
-                      <div>
-                        <h4 className="text-sm font-semibold text-slate-200">
-                          Keyword Signals (BM25)
-                        </h4>
-                        <p className="mt-1 text-xs text-slate-400">
-                          How well your resume keywords match the job
-                          description.
-                        </p>
-
-                        {/* Overlap terms */}
-                        {atsReport.bm25_signals.overlap_terms.length > 0 && (
-                          <div className="mt-3">
-                            <p className="text-xs font-medium text-emerald-300">
-                              Matched keywords (
-                              {atsReport.bm25_signals.overlap_terms.length})
+                      <section className="grid gap-4 lg:grid-cols-2">
+                        {atsReport.summary ? (
+                          <article className="rounded-[1.2rem] border border-[var(--rt-stroke)] bg-[rgba(255,255,255,0.62)] p-5">
+                            <p className="rt-label">What changed</p>
+                            <p className="font-serif-display mt-3 text-lg leading-relaxed text-[var(--rt-ink-700)]">
+                              {atsReport.summary}
                             </p>
-                            <div className="mt-1.5 flex flex-wrap gap-1.5">
-                              {atsReport.bm25_signals.overlap_terms.map(
-                                (term) => (
+                          </article>
+                        ) : null}
+
+                        {atsReport.change_plan.length > 0 ? (
+                          <article className="rounded-[1.2rem] border border-[var(--rt-stroke)] bg-[rgba(255,255,255,0.62)] p-5">
+                            <p className="rt-label">Change plan</p>
+                            <ul className="mt-3 space-y-2">
+                              {atsReport.change_plan.map((change, index) => (
+                                <li
+                                  key={`plan-${index}`}
+                                  className="flex items-start gap-2 text-sm text-[var(--rt-ink-700)]"
+                                >
+                                  <span className="mt-[0.35rem] inline-block h-1.5 w-1.5 rounded-full bg-[var(--rt-accent)]" />
+                                  {change}
+                                </li>
+                              ))}
+                            </ul>
+                          </article>
+                        ) : null}
+                      </section>
+
+                      {atsReport.notes.length > 0 ? (
+                        <section className="rounded-[1.2rem] border border-[var(--rt-stroke)] bg-[rgba(255,255,255,0.62)] p-5">
+                          <p className="rt-label">Analysis notes</p>
+                          <ul className="mt-3 space-y-2">
+                            {atsReport.notes.map((note, index) => (
+                              <li
+                                key={`note-${index}`}
+                                className="flex items-start gap-2 text-sm text-[var(--rt-ink-700)]"
+                              >
+                                <span className="mt-[0.35rem] inline-block h-1.5 w-1.5 rounded-full bg-[var(--rt-blue)]" />
+                                {note}
+                              </li>
+                            ))}
+                          </ul>
+                        </section>
+                      ) : null}
+
+                      {atsReport.interview_questions.length > 0 ? (
+                        <section className="rounded-[1.2rem] border border-[var(--rt-stroke)] bg-[rgba(255,255,255,0.62)] p-5">
+                          <p className="rt-label">Interview prep prompts</p>
+                          <div className="mt-3 space-y-3">
+                            {atsReport.interview_questions.slice(0, 3).map((item) => (
+                              <article
+                                key={item.question}
+                                className="rounded-[1rem] border border-[rgba(56,64,82,0.16)] bg-[rgba(245,248,253,0.65)] p-3"
+                              >
+                                <h4 className="font-grotesk text-xl font-semibold text-[var(--rt-ink-900)]">
+                                  {item.question}
+                                </h4>
+                                {item.answer_star.length > 0 ? (
+                                  <ul className="mt-2 space-y-1">
+                                    {item.answer_star.map((point, index) => (
+                                      <li
+                                        key={`${item.question}-star-${index}`}
+                                        className="text-sm text-[var(--rt-ink-700)]"
+                                      >
+                                        • {point}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : null}
+                              </article>
+                            ))}
+                          </div>
+                        </section>
+                      ) : null}
+
+                      {atsReport.bm25_signals ? (
+                        <section className="rounded-[1.2rem] border border-[var(--rt-stroke)] bg-[rgba(255,255,255,0.62)] p-5">
+                          <p className="rt-label">Keyword signal map</p>
+                          <p className="mt-2 text-sm text-[var(--rt-ink-700)]">
+                            BM25 terms show which language is already strong and which terms still need coverage.
+                          </p>
+
+                          {atsReport.bm25_signals.overlap_terms.length > 0 ? (
+                            <div className="mt-4">
+                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--rt-green)]">
+                                Matched keywords ({atsReport.bm25_signals.overlap_terms.length})
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {atsReport.bm25_signals.overlap_terms.map((term) => (
                                   <span
                                     key={term}
-                                    className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs text-emerald-300 border border-emerald-500/20"
+                                    className="rounded-full border border-[rgba(41,137,109,0.34)] bg-[rgba(220,243,234,0.76)] px-2.5 py-1 text-xs text-[rgba(28,112,87,0.92)]"
                                   >
                                     {term}
                                   </span>
-                                ),
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Missing terms */}
-                        {atsReport.bm25_signals.missing_job_terms.length >
-                          0 && (
-                          <div className="mt-3">
-                            <p className="text-xs font-medium text-rose-300">
-                              Missing from resume (
-                              {atsReport.bm25_signals.missing_job_terms.length})
-                            </p>
-                            <div className="mt-1.5 flex flex-wrap gap-1.5">
-                              {atsReport.bm25_signals.missing_job_terms
-                                .slice(0, 15)
-                                .map((ts) => (
-                                  <span
-                                    key={ts.term}
-                                    className="rounded-full bg-rose-500/15 px-2.5 py-1 text-xs text-rose-300 border border-rose-500/20"
-                                  >
-                                    {ts.term}
-                                  </span>
                                 ))}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          ) : null}
 
-                        {/* Top job terms with scores */}
-                        {atsReport.bm25_signals.top_job_terms.length > 0 && (
-                          <div className="mt-3">
-                            <p className="text-xs font-medium text-slate-300">
-                              Top job terms by importance
-                            </p>
-                            <div className="mt-1.5 space-y-1">
-                              {atsReport.bm25_signals.top_job_terms.map(
-                                (ts) => {
-                                  const isMatched =
-                                    atsReport.bm25_signals!.overlap_terms.includes(
-                                      ts.term,
-                                    );
-                                  return (
-                                    <div
-                                      key={ts.term}
-                                      className="flex items-center gap-2"
+                          {atsReport.bm25_signals.missing_job_terms.length > 0 ? (
+                            <div className="mt-4">
+                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--rt-accent-strong)]">
+                                Missing from resume ({atsReport.bm25_signals.missing_job_terms.length})
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {atsReport.bm25_signals.missing_job_terms
+                                  .slice(0, 18)
+                                  .map((termScore) => (
+                                    <span
+                                      key={termScore.term}
+                                      className="rounded-full border border-[rgba(183,83,60,0.28)] bg-[rgba(255,237,232,0.82)] px-2.5 py-1 text-xs text-[var(--rt-accent-strong)]"
                                     >
-                                      <span
-                                        className={`text-xs w-24 truncate ${isMatched ? "text-emerald-300" : "text-slate-400"}`}
-                                      >
-                                        {ts.term}
-                                      </span>
-                                      <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
-                                        <div
-                                          className={`h-full rounded-full transition-all ${isMatched ? "bg-emerald-500/60" : "bg-slate-500/40"}`}
-                                          style={{
-                                            width: `${Math.min(100, (ts.score / (atsReport.bm25_signals!.top_job_terms[0]?.score || 1)) * 100)}%`,
-                                          }}
-                                        />
-                                      </div>
-                                    </div>
-                                  );
-                                },
-                              )}
+                                      {termScore.term}
+                                    </span>
+                                  ))}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          ) : null}
 
-                        {atsReport.bm25_signals.bucketed_top_terms && (
-                          <div className="mt-4">
-                            <p className="text-xs font-medium text-slate-300">
-                              Deterministic skill buckets
-                            </p>
-                            <div className="mt-2 space-y-2">
+                          {atsReport.bm25_signals.top_job_terms.length > 0 ? (
+                            <div className="mt-4">
+                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--rt-ink-500)]">
+                                Top job terms by weight
+                              </p>
+                              <div className="mt-2 space-y-2">
+                                {atsReport.bm25_signals.top_job_terms
+                                  .slice(0, 10)
+                                  .map((termScore) => {
+                                    const topScore =
+                                      atsReport.bm25_signals?.top_job_terms[0]
+                                        ?.score || 1;
+                                    const width = Math.min(
+                                      100,
+                                      (termScore.score / topScore) * 100,
+                                    );
+                                    const matched =
+                                      atsReport.bm25_signals?.overlap_terms.includes(
+                                        termScore.term,
+                                      );
+
+                                    return (
+                                      <div
+                                        key={`top-term-${termScore.term}`}
+                                        className="grid grid-cols-[minmax(0,120px)_1fr] items-center gap-2"
+                                      >
+                                        <span
+                                          className={`truncate text-xs ${
+                                            matched
+                                              ? "text-[var(--rt-green)]"
+                                              : "text-[var(--rt-ink-700)]"
+                                          }`}
+                                        >
+                                          {termScore.term}
+                                        </span>
+                                        <div className="rt-progress-track">
+                                          <div
+                                            className="rt-progress-fill"
+                                            style={{ width: `${width}%` }}
+                                          />
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {atsReport.bm25_signals.bucketed_top_terms ? (
+                            <div className="mt-4 space-y-2">
+                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--rt-ink-500)]">
+                                Deterministic skill buckets
+                              </p>
                               {bucketOrder.map((bucket) => {
                                 const items =
                                   atsReport.bm25_signals?.bucketed_top_terms?.[
                                     bucket.key
                                   ] || [];
+
                                 if (items.length === 0) return null;
+
                                 return (
-                                  <div key={bucket.key}>
-                                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                                  <div key={`bucket-${bucket.key}`}>
+                                    <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--rt-ink-500)]">
                                       {bucket.label}
                                     </p>
                                     <div className="mt-1 flex flex-wrap gap-1.5">
@@ -1279,8 +1306,8 @@ export default function ResultPage() {
                                             key={`${bucket.key}:${item.term}`}
                                             className={`rounded-full border px-2.5 py-1 text-xs ${
                                               matched
-                                                ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
-                                                : "border-slate-600/40 bg-slate-500/10 text-slate-300"
+                                                ? "border-[rgba(41,137,109,0.34)] bg-[rgba(220,243,234,0.76)] text-[rgba(28,112,87,0.92)]"
+                                                : "border-[rgba(67,63,52,0.2)] bg-[rgba(255,255,255,0.58)] text-[var(--rt-ink-700)]"
                                             }`}
                                           >
                                             {item.term}
@@ -1292,82 +1319,73 @@ export default function ResultPage() {
                                 );
                               })}
                             </div>
-                          </div>
-                        )}
+                          ) : null}
 
-                        {Array.isArray(
-                          atsReport.bm25_signals.low_signal_terms,
-                        ) &&
-                          atsReport.bm25_signals.low_signal_terms.length >
-                            0 && (
-                            <p className="mt-3 text-[11px] text-slate-500">
-                              {atsReport.bm25_signals.low_signal_terms.length}{" "}
-                              low-signal terms were filtered out from
-                              missing/top term lists.
+                          {Array.isArray(atsReport.bm25_signals.low_signal_terms) &&
+                          atsReport.bm25_signals.low_signal_terms.length > 0 ? (
+                            <p className="mt-4 text-xs text-[var(--rt-ink-500)]">
+                              {atsReport.bm25_signals.low_signal_terms.length} low-signal terms were filtered from the primary term lists.
                             </p>
-                          )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* ── Cover Letter Tab ────────────────────────── */}
-              <div
-                id="panel-cover"
-                role="tabpanel"
-                aria-labelledby="tab-cover"
-                className={activeTab === "cover" ? "mt-4" : "hidden"}
-              >
-                {coverLetterPdfLoading || !coverLetterPdfUrl ? (
-                  <PDFSkeleton />
-                ) : (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                        Generated cover letter
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={handleDownloadCoverLetterPDF}
-                          className="rounded-full border border-ember-500/60 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-ember-200 transition hover:border-ember-400 hover:text-white"
-                          aria-label="Download cover letter as PDF"
-                        >
-                          Download PDF
-                        </button>
-                        <button
-                          onClick={handleDownloadCoverLetterDOCX}
-                          className="rounded-full border border-emerald-500/60 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-emerald-200 transition hover:border-emerald-400 hover:text-white"
-                          aria-label="Download cover letter as DOCX"
-                        >
-                          Download Word
-                        </button>
-                      </div>
+                          ) : null}
+                        </section>
+                      ) : null}
                     </div>
-                    <iframe
-                      src={coverLetterPdfUrl}
-                      title="Cover letter preview"
-                      className="h-[600px] w-full rounded-2xl border border-white/10 bg-white sm:h-[750px]"
-                    />
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
 
-              {/* ── LaTeX Source Tab ──────────────────────────── */}
-              <div
-                id="panel-latex"
-                role="tabpanel"
-                aria-labelledby="tab-latex"
-                className={activeTab === "latex" ? "mt-4" : "hidden"}
-              >
-                <pre className="max-h-[500px] overflow-auto rounded-2xl border border-white/10 bg-ink-950 p-4 text-xs text-slate-100 sm:max-h-[600px]">
-                  {latex}
-                </pre>
-              </div>
-            </>
-          )}
-        </div>
-      </main>
+                <div
+                  id="panel-cover"
+                  role="tabpanel"
+                  aria-labelledby="tab-cover"
+                  className={activeTab === "cover" ? "mt-4" : "hidden"}
+                >
+                  {coverLetterPdfLoading || !coverLetterPdfUrl ? (
+                    <PDFSkeleton />
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="rt-label">Generated cover letter</p>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={handleDownloadCoverLetterPDF}
+                            className="rt-btn-primary px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em]"
+                            aria-label="Download cover letter as PDF"
+                          >
+                            Download PDF
+                          </button>
+                          <button
+                            onClick={handleDownloadCoverLetterDOCX}
+                            className="rt-btn-secondary px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em]"
+                            aria-label="Download cover letter as DOCX"
+                          >
+                            Download DOCX
+                          </button>
+                        </div>
+                      </div>
+                      <iframe
+                        src={coverLetterPdfUrl}
+                        title="Cover letter preview"
+                        className="h-[65vh] min-h-[520px] w-full rounded-[1.2rem] border border-[var(--rt-stroke)] bg-white"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  id="panel-latex"
+                  role="tabpanel"
+                  aria-labelledby="tab-latex"
+                  className={activeTab === "latex" ? "mt-4" : "hidden"}
+                >
+                  <pre className="max-h-[68vh] overflow-auto rounded-[1.2rem] border border-[var(--rt-stroke)] bg-[rgba(255,255,255,0.68)] p-4 text-xs leading-relaxed text-[var(--rt-ink-900)]">
+                    {latex}
+                  </pre>
+                </div>
+              </>
+            )}
+          </section>
+        </main>
+      </div>
     </div>
   );
 }
