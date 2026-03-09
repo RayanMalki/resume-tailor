@@ -13,11 +13,24 @@ type RunItem = {
   Company?: string; company?: string;
   Status?: string; status?: string;
   CreatedAt?: string; createdAt?: string;
+  JobText?: string; jobText?: string;
+};
+
+const runTitle = (r: RunItem): string => {
+  const explicit = r.JobTitle ?? r.jobTitle;
+  if (explicit) return explicit;
+  const desc = r.JobText ?? r.jobText ?? "";
+  if (!desc) return "";
+  // First sentence, capped at 6 words, then ellipsis
+  const sentence = desc.split(/[.\n]/)[0].trim();
+  const words = sentence.split(/\s+/).filter(Boolean);
+  if (words.length <= 6) return words.join(" ");
+  return words.slice(0, 6).join(" ") + "…";
 };
 
 const normalizeRun = (r: RunItem) => ({
   id: r.ID ?? r.id ?? "",
-  jobTitle: r.JobTitle ?? r.jobTitle ?? "",
+  jobTitle: runTitle(r),
   company: r.Company ?? r.company ?? "",
   status: r.Status ?? r.status ?? "",
   createdAt: r.CreatedAt ?? r.createdAt ?? "",
@@ -264,6 +277,7 @@ export default function DashboardPage() {
                           <p className="truncate font-grotesk text-sm font-semibold text-[var(--rt-ink-900)]">
                             {run.jobTitle || "Untitled run"}{run.company ? ` · ${run.company}` : ""}
                           </p>
+
                           {run.createdAt && (
                             <p className="mt-0.5 text-xs text-[var(--rt-ink-500)]">
                               {formatRunDate(run.createdAt)}
