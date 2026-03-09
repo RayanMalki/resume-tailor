@@ -21,7 +21,7 @@ export default function HomePage() {
   return (
     <div className="rt-canvas">
       <div className="rt-shell">
-        <EditorialNav mode="public" active="home" />
+        <EditorialNav mode="public" />
 
         <main className="mt-4 space-y-4 sm:mt-6 sm:space-y-6">
           <section className="grid gap-4 lg:grid-cols-[1.25fr_1fr]">
