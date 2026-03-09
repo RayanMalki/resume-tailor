@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import TopBar from "../components/TopBar";
+import EditorialNav from "../components/EditorialNav";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "/api";
 
@@ -16,7 +16,6 @@ function VerifyEmailContent() {
   const [state, setState] = useState<VerifyState>(token ? "loading" : "error");
   const [errorMsg, setErrorMsg] = useState(token ? "" : "Missing verification token.");
 
-  // Resend state
   const [resending, setResending] = useState(false);
   const [resendResult, setResendResult] = useState<string | null>(null);
 
@@ -87,19 +86,19 @@ function VerifyEmailContent() {
     <>
       {state === "loading" && (
         <div className="mt-6 flex flex-col items-center gap-4">
-          <div className="h-10 w-10 animate-spin rounded-full border-2 border-ember-500/30 border-t-ember-500" />
-          <p className="text-sm text-slate-400">Verifying your email&hellip;</p>
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-[rgba(190,76,47,0.3)] border-t-[var(--rt-accent)]" />
+          <p className="text-sm text-[var(--rt-ink-700)]">Verifying your email&hellip;</p>
         </div>
       )}
 
       {state === "success" && (
-        <div className="mt-6 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
-          <p className="text-sm text-emerald-300">
+        <div className="mt-6 rounded-lg border border-[rgba(41,137,109,0.25)] bg-[rgba(229,246,239,0.78)] px-4 py-3">
+          <p className="text-sm text-[rgba(28,112,87,0.92)]">
             Your email has been verified successfully!
           </p>
           <Link
             href="/login"
-            className="mt-3 inline-block rounded-full bg-ember-500 px-5 py-2 text-sm font-semibold text-ink-950 shadow-glow transition hover:-translate-y-0.5 hover:bg-ember-400"
+            className="rt-btn-primary mt-3 inline-flex px-5 py-2 text-sm font-semibold"
           >
             Go to login
           </Link>
@@ -108,35 +107,33 @@ function VerifyEmailContent() {
 
       {state === "error" && (
         <div className="mt-6 space-y-4">
-          <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-4 py-3">
-            <p className="text-sm text-rose-300">{errorMsg}</p>
+          <div className="rounded-lg border border-[rgba(190,76,47,0.2)] bg-[rgba(255,236,229,0.85)] px-4 py-3">
+            <p className="text-sm text-[var(--rt-accent-strong)]">{errorMsg}</p>
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row">
             <button
               onClick={handleResend}
               disabled={resending}
-              className="flex items-center justify-center gap-2 rounded-full border border-white/10 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-ember-400/60 hover:text-ember-200 disabled:opacity-70"
+              className="flex items-center justify-center gap-2 rounded-full border border-[rgba(67,63,52,0.25)] bg-white/70 px-4 py-2.5 text-sm font-semibold text-[var(--rt-ink-700)] transition hover:border-[var(--rt-accent)] hover:text-[var(--rt-accent)] disabled:opacity-70"
             >
               {resending ? (
                 <>
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200/30 border-t-slate-200" />
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-[rgba(67,63,52,0.2)] border-t-[var(--rt-ink-700)]" />
                   Sending&hellip;
                 </>
-              ) : (
-                "Resend verification email"
-              )}
+              ) : "Resend verification email"}
             </button>
             <Link
               href="/login"
-              className="flex items-center justify-center rounded-full border border-white/10 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-ember-400/60 hover:text-ember-200"
+              className="flex items-center justify-center rounded-full border border-[rgba(67,63,52,0.25)] bg-white/70 px-4 py-2.5 text-sm font-semibold text-[var(--rt-ink-700)] transition hover:border-[var(--rt-accent)] hover:text-[var(--rt-accent)]"
             >
               Back to login
             </Link>
           </div>
 
           {resendResult ? (
-            <p className="text-sm text-slate-400">{resendResult}</p>
+            <p className="text-sm text-[var(--rt-ink-700)]">{resendResult}</p>
           ) : null}
         </div>
       )}
@@ -146,19 +143,24 @@ function VerifyEmailContent() {
 
 export default function VerifyPage() {
   return (
-    <div className="min-h-screen bg-ink-950 text-slate-100">
-      <TopBar />
-      <main className="mx-auto flex w-full max-w-5xl flex-1 items-center justify-center px-4 py-10 sm:px-6 sm:py-16">
-        <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-ink-900/70 p-6 shadow-panel backdrop-blur sm:p-8">
-          <h1 className="text-xl font-semibold text-white sm:text-2xl">Email verification</h1>
-          <p className="mt-2 text-sm text-slate-400">
-            Confirming your email address&hellip;
-          </p>
-          <Suspense fallback={<div className="mt-6 h-20 animate-pulse rounded-lg bg-white/5" />}>
-            <VerifyEmailContent />
-          </Suspense>
-        </div>
-      </main>
+    <div className="rt-canvas">
+      <div className="rt-shell">
+        <EditorialNav mode="public" />
+        <main className="flex min-h-[calc(100vh-5rem)] items-center justify-center py-10">
+          <div className="rt-panel w-full max-w-md p-6 sm:p-8">
+            <p className="rt-label">Account</p>
+            <h1 className="mt-2 font-grotesk text-3xl font-semibold text-[var(--rt-ink-900)]">
+              Email verification
+            </h1>
+            <p className="font-serif-display mt-2 text-lg text-[var(--rt-ink-700)]">
+              Confirming your email address&hellip;
+            </p>
+            <Suspense fallback={<div className="mt-6 h-20 animate-pulse rounded-lg bg-[rgba(81,73,62,0.08)]" />}>
+              <VerifyEmailContent />
+            </Suspense>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
