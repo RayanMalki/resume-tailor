@@ -1,7 +1,7 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
-import { IBM_Plex_Sans, Space_Grotesk } from "next/font/google";
+import { Fraunces, IBM_Plex_Sans, Space_Grotesk } from "next/font/google";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ToastProvider } from "./components/Toast";
 
@@ -14,6 +14,13 @@ const grotesk = Space_Grotesk({
 const plex = IBM_Plex_Sans({
   subsets: ["latin"],
   variable: "--font-plex",
+  display: "swap",
+  weight: ["400", "500", "600", "700"]
+});
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-serif",
   display: "swap",
   weight: ["400", "500", "600", "700"]
 });
@@ -61,7 +68,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${grotesk.variable} ${plex.variable}`}>
+    <html
+      lang="en"
+      className={`${grotesk.variable} ${plex.variable} ${fraunces.variable}`}
+    >
       <body className="min-h-screen font-plex">
         <a href="#main-content" className="skip-link">
           Skip to content
