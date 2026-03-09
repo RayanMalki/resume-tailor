@@ -7,7 +7,7 @@ import (
 
 	"resume-tailor/internal/httpapi/middleware"
 	"resume-tailor/internal/resumes"
-	"resume-tailor/internal/scoring/classifier"
+	"github.com/RayanMalki/resumetailor-core/scoring/classifier"
 
 	"github.com/google/uuid"
 )

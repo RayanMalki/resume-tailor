@@ -18,9 +18,9 @@ import (
 	"resume-tailor/internal/latex"
 	"resume-tailor/internal/resumes"
 	"resume-tailor/internal/runreports"
-	"resume-tailor/internal/scoring/bm25"
-	"resume-tailor/internal/scoring/classifier"
-	"resume-tailor/internal/scoring/profiles"
+	"github.com/RayanMalki/resumetailor-core/profiles"
+	"github.com/RayanMalki/resumetailor-core/scoring"
+	"github.com/RayanMalki/resumetailor-core/scoring/classifier"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -370,8 +370,8 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 	)
 
 	// 4. Compute BM25 signals on ORIGINAL resume
-	var bm25Signals *bm25.Signals
-	signals, err := bm25.ComputeWithProfile(resumeText, jobText, effectiveProfile)
+	var bm25Signals *scoring.Signals
+	signals, err := scoring.ComputeWithProfile(resumeText, jobText, effectiveProfile)
 	if err != nil {
 		slog.Warn("BM25 computation failed, continuing without signals", "error", err, "run_id", runID)
 	} else {
@@ -436,10 +436,10 @@ func (w *Worker) processRun(ctx context.Context, runID uuid.UUID) error {
 	// 5. Compute BM25 on TAILORED resume and generate report
 	if !reportExists {
 		// Compute BM25 on the tailored resume text for an accurate score
-		var tailoredSignals bm25.Signals
+		var tailoredSignals scoring.Signals
 		if specGenerated {
 			tailoredText := ai.ResumeSpecToText(spec)
-			ts, err := bm25.ComputeWithProfile(tailoredText, jobText, effectiveProfile)
+			ts, err := scoring.ComputeWithProfile(tailoredText, jobText, effectiveProfile)
 			if err != nil {
 				slog.Warn("BM25 computation on tailored resume failed", "error", err, "run_id", runID)
 				if bm25Signals != nil {
@@ -690,20 +690,20 @@ WHERE id = $1`
 type reportPayload struct {
 	ReportVersion        int                `json:"report_version"`
 	GeneratedAt          string             `json:"generated_at"`
-	BM25Signals          bm25.Signals       `json:"bm25_signals"`
+	BM25Signals          scoring.Signals       `json:"bm25_signals"`
 	ATSReport            ai.ATSReport       `json:"ats_report"`
 	ChangePlan           ai.ChangePlan      `json:"change_plan"`
 	Discipline           string             `json:"discipline,omitempty"`
 	DisciplineConfidence float64            `json:"discipline_confidence,omitempty"`
 	DisciplineSource     string             `json:"discipline_source,omitempty"`
 	LowConfidence        bool               `json:"low_confidence,omitempty"`
-	DisciplineEvidence   []bm25.TermScore   `json:"discipline_evidence,omitempty"`
+	DisciplineEvidence   []scoring.TermScore   `json:"discipline_evidence,omitempty"`
 	CategoryCoverage     map[string]float64 `json:"category_coverage,omitempty"`
 	ProfileVersion       string             `json:"profile_version,omitempty"`
 	ScoringDiscipline    string             `json:"scoring_discipline,omitempty"`
 }
 
-func applyDisciplineSignals(signals *bm25.Signals, discipline profiles.Discipline, evidence []classifier.EvidenceTerm) {
+func applyDisciplineSignals(signals *scoring.Signals, discipline profiles.Discipline, evidence []classifier.EvidenceTerm) {
 	if signals == nil {
 		return
 	}
@@ -712,16 +712,16 @@ func applyDisciplineSignals(signals *bm25.Signals, discipline profiles.Disciplin
 	signals.DisciplineEvidence = toTermScores(evidence)
 }
 
-func toTermScores(evidence []classifier.EvidenceTerm) []bm25.TermScore {
+func toTermScores(evidence []classifier.EvidenceTerm) []scoring.TermScore {
 	if len(evidence) == 0 {
 		return nil
 	}
-	out := make([]bm25.TermScore, 0, len(evidence))
+	out := make([]scoring.TermScore, 0, len(evidence))
 	for _, item := range evidence {
 		if strings.TrimSpace(item.Term) == "" {
 			continue
 		}
-		out = append(out, bm25.TermScore{
+		out = append(out, scoring.TermScore{
 			Term:  item.Term,
 			Score: item.Score,
 		})

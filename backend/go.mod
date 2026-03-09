@@ -3,6 +3,7 @@ module resume-tailor
 go 1.24.4
 
 require (
+	github.com/RayanMalki/resumetailor-core v0.1.0
 	github.com/crawlab-team/bm25 v0.0.0-20250328025100-5014dda86138
 	github.com/getsentry/sentry-go v0.42.0
 	github.com/go-chi/chi/v5 v5.2.3
@@ -12,6 +13,7 @@ require (
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/openai/openai-go v1.12.0
 	golang.org/x/crypto v0.37.0
+	golang.org/x/text v0.24.0
 )
 
 require (
@@ -24,5 +26,5 @@ require (
 	github.com/tidwall/sjson v1.2.5 // indirect
 	golang.org/x/sync v0.13.0 // indirect
 	golang.org/x/sys v0.32.0 // indirect
-	golang.org/x/text v0.24.0 // indirect
 )
+

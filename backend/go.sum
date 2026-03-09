@@ -1,3 +1,5 @@
+github.com/RayanMalki/resumetailor-core v0.1.0 h1:DNxaLMt2b0P1J1AxfWSI2b1PlsDeSUpsIn7j5bN82kM=
+github.com/RayanMalki/resumetailor-core v0.1.0/go.mod h1:hkY532axorcJI6g9mm0Yd5dL/tFbAm3xtVeCfLHCBw4=
 github.com/crawlab-team/bm25 v0.0.0-20250328025100-5014dda86138 h1:IbMH1qFoERnv6tyS37gopuEuhz2Y8Am+p3KUwOjFr3s=
 github.com/crawlab-team/bm25 v0.0.0-20250328025100-5014dda86138/go.mod h1:yop6SXFLxGhP5S6PgrJYLDi1pzqRgJzOTpcPQNAHXFA=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
