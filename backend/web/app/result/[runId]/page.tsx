@@ -49,6 +49,21 @@ type ATSReport = {
 
 type Tab = "preview" | "report" | "cover" | "latex";
 
+const scoreHeadline = (score: number | null | undefined): string => {
+  if (score == null) return "Analyzing your resume against the job";
+  const pct = Math.round(score * 100);
+  if (pct >= 91) return "Outstanding match — you're built for this role";
+  if (pct >= 81) return "Excellent alignment — just polish the final details";
+  if (pct >= 71) return "Strong base with room to sharpen impact language";
+  if (pct >= 61) return "Good start — a few targeted edits will lift you higher";
+  if (pct >= 51) return "Halfway there — key terms and structure need attention";
+  if (pct >= 41) return "Decent foundation, but alignment gaps are holding you back";
+  if (pct >= 31) return "Some signal detected — missing critical match factors";
+  if (pct >= 21) return "Below the bar — gaps in core keywords and structure";
+  if (pct >= 11) return "Far from the target — major restructuring required";
+  return "Needs significant work — let's rebuild the alignment";
+};
+
 const bucketOrder: Array<{ key: string; label: string }> = [
   { key: "languages", label: "Languages" },
   { key: "cloud_devops_db", label: "Cloud / DevOps / DB" },
@@ -861,7 +876,7 @@ export default function ResultPage() {
               <div>
                 <p className="rt-label">ATS Snapshot</p>
                 <h1 className="mt-2 font-grotesk text-4xl font-semibold text-[var(--rt-ink-900)] sm:text-5xl">
-                  Strong base with room to sharpen impact language
+                  {scoreHeadline(atsReport?.score)}
                 </h1>
                 <p className="font-serif-display mt-2 text-xl text-[var(--rt-ink-700)]">
                   {loadingMessage}
