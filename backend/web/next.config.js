@@ -6,10 +6,6 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-    dirs: ["app", "components", "lib", "pages"],
-  },
   async rewrites() {
     return [
       {
