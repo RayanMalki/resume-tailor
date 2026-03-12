@@ -321,7 +321,7 @@ func buildReportPrompt(addedKeywords, missingTerms []string, lang string, discip
 	}
 
 	b.WriteString("RULES:\n")
-	b.WriteString("- 'summary': 2-3 sentences. If no keywords were added, say the resume was already well-suited and explain what's still missing.\n")
+	b.WriteString("- 'summary': 2-3 sentences. If no keywords were added, say the resume/cv( if in french) was already well-suited and explain what's still missing.\n")
 	b.WriteString("- 'notes': 2-3 short observations about ATS compatibility.\n")
 	b.WriteString("- 'interview_questions': exactly 5 likely interview questions for this role.\n")
 	b.WriteString("- For each interview question, provide STAR bullet answers in 4 bullets: Situation, Task, Action, Result.\n")
@@ -392,7 +392,6 @@ func buildResumeLatexPrompt(resumeText, jobText string, bm25Signals any) string 
 	b.WriteString("Keep bullet points concise and impact-focused.\\n")
 	b.WriteString("The resume MUST fit on ONE page. If needed, reduce bullets, shorten phrasing, or drop least-relevant items to stay on one page.\\n")
 	b.WriteString("Use the pattern: \"Did X using Y resulting in Z\" for experience and project bullets.\\n")
-	b.WriteString("Bold technical skills/keywords (e.g., languages, frameworks, tools, platforms) using \\\\textbf{...}, especially in project/experience bullets. Do not bold non-technical words.\\n")
 	b.WriteString("Tailor to the job description. Use the resume content as the source.\\n\\n")
 
 	b.WriteString("RESUME:\\n")
