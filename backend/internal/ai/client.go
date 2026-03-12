@@ -485,7 +485,9 @@ func buildResumeSpecPrompt(resumeText, jobText string, bm25Signals any, projectC
 	b.WriteString("NEVER add a technology, tool, platform, or skill that is not already present in the original resume.\n")
 	b.WriteString("You may only add synonym forms of existing skills (e.g. 'Golang' if 'Go' is present, 'Cloud' if 'Infonuagique' is present).\n")
 	b.WriteString("Target one page, but prioritize preserving relevant content quality over aggressive trimming.\n")
-	b.WriteString("If space is tight, shorten wording before removing relevant projects or experiences.\n\n")
+	b.WriteString("If space is tight, shorten wording before removing relevant projects or experiences.\n")
+	b.WriteString("- Each item MUST appear in exactly ONE section. Never place the same role, company, or project in both experience and projects.\n")
+	b.WriteString("- experience is for paid professional/internship roles at a company or organization. projects is for personal, academic, open-source, or side projects without a company employer.\n\n")
 	if strings.TrimSpace(disciplineCtx.Discipline) != "" {
 		b.WriteString("DISCIPLINE CONTEXT:\n")
 		b.WriteString("- discipline: " + disciplineCtx.Discipline + "\n")
